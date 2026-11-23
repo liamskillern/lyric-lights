@@ -37,6 +37,8 @@ export class Visualizer {
   private lastNow = 0;
   private sceneTime = 0;
   private pulse = 0;
+  private wasChorus = false;
+  private chorusAmt = 0;
   private bands: Bands = { ...SILENT };
   private flashes = new FlashLimiter(3);
   /** turns off rings and flashes (reduced motion) */
@@ -119,6 +121,11 @@ export class Visualizer {
       this.effects.beat(0.6 + input.level * 0.6, ring);
     }
     this.pulse *= Math.exp(-dt * 6);
+
+    // Chorus: a burst when it starts, and the lyrics grow a little while it lasts.
+    if (target.chorus && !this.wasChorus) this.effects.burst(s.colors, this.allowFlashes);
+    this.wasChorus = target.chorus;
+    this.chorusAmt = lerp(this.chorusAmt, target.chorus ? 1 : 0, 1 - Math.exp(-dt * 3));
     this.sceneTime += dt * s.speed;
 
     if (input.lineIndex !== this.lastIndex) {
@@ -150,6 +157,7 @@ export class Visualizer {
         color: s.colors.text,
         glow: s.colors.accent,
         pulse: this.pulse,
+        chorus: this.chorusAmt,
         title: this.title,
       });
     }

@@ -96,8 +96,8 @@ try {
     check(s1.max > 150, `demo: canvas has bright content (max ${s1.max.toFixed(0)})`);
     await page.waitForTimeout(4000); // ~9 s: rain line
     await page.screenshot({ path: `${OUT}demo-rain.png` });
-    await page.waitForTimeout(17500); // ~26.6 s: "Light a little fire…"
-    await page.screenshot({ path: `${OUT}demo-fire.png` });
+    await page.waitForTimeout(21500); // ~30.6 s: second chorus "We are neon weather…"
+    await page.screenshot({ path: `${OUT}demo-chorus.png` });
     check(errors.length === 0, `demo: no console errors ${errors.join(" | ")}`);
     await page.close();
   }

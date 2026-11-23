@@ -34,6 +34,8 @@ export interface LineMood {
   themes: Theme[];
   /** words per second while this line is sung; null if unknown */
   wordsPerSec: number | null;
+  /** part of the chorus (lines that repeat in blocks) */
+  chorus: boolean;
 }
 
 export interface SongMood {
@@ -74,7 +76,40 @@ export function valenceOf(text: string): number {
   return Math.tanh(comparative * 1.2);
 }
 
+/** Lowercase, no punctuation, single spaces: "Hold on, HOLD ON!" → "hold on hold on". */
+export function normalizeLine(text: string): string {
+  return words(text).join(" ");
+}
+
+/**
+ * Which lines are the chorus. A line counts if its text (ignoring case and punctuation)
+ * shows up more than once AND it sits in a run of at least 2 such lines, or it's a hook
+ * that repeats 3+ times on its own. Very short lines ("oh", "yeah") never count. (Pure, tested.)
+ */
+export function findChorus(lines: LyricLine[]): boolean[] {
+  const keys = lines.map((l) => {
+    const k = normalizeLine(l.text);
+    return k.split(" ").length >= 3 ? k : "";
+  });
+  const count = new Map<string, number>();
+  for (const k of keys) if (k) count.set(k, (count.get(k) ?? 0) + 1);
+
+  let minRepeats = 2;
+  const repeatedShare = keys.filter((k) => k && count.get(k)! >= 2).length / Math.max(1, keys.filter(Boolean).length);
+  // If almost everything repeats, only the most-repeated lines are the chorus.
+  if (repeatedShare > 0.7) minRepeats = 3;
+
+  const repeated = keys.map((k) => !!k && count.get(k)! >= minRepeats);
+  return repeated.map((r, i) => {
+    if (!r) return false;
+    const inRun = repeated[i - 1] === true || repeated[i + 1] === true;
+    const hook = count.get(keys[i])! >= 3;
+    return inRun || hook;
+  });
+}
+
 export function analyzeLines(lines: LyricLine[]): LineMood[] {
+  const chorus = findChorus(lines);
   return lines.map((line, i) => {
     const next = lines[i + 1];
     const durSec = next ? (next.timeMs - line.timeMs) / 1000 : null;
@@ -83,6 +118,7 @@ export function analyzeLines(lines: LyricLine[]): LineMood[] {
       valence: valenceOf(line.text),
       themes: themesOf(line.text),
       wordsPerSec: durSec && durSec > 0.3 && count ? Math.min(count / durSec, 8) : null,
+      chorus: chorus[i],
     };
   });
 }

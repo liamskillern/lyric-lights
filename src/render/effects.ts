@@ -78,6 +78,17 @@ export class Effects {
     }
   }
 
+  /** A chorus starts: a shower of sparkles (and a ring, unless flashes are off). */
+  burst(colors: SceneColors, ring = true): void {
+    if (ring) this.rings.push({ r: 0, alpha: 0.35 });
+    const n = Math.round(45 * Math.min((this.w * this.h) / (1280 * 800), 2));
+    for (let i = 0; i < n && this.ps.length < MAX_PARTICLES; i++) {
+      const p = this.make("sparkles", colors);
+      p.max *= 1.6;
+      this.ps.push(p);
+    }
+  }
+
   update(dt: number, speed: number, intensity: Record<Effect, number>, colors: SceneColors): void {
     const { w, h } = this;
     const area = Math.min((w * h) / (1280 * 800), 2.2);

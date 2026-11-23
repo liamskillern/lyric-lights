@@ -37,6 +37,8 @@ export interface SceneTarget {
   brightness: number;
   /** 0..1 intensity for each effect */
   effects: Record<Effect, number>;
+  /** the current line is part of the chorus */
+  chorus: boolean;
 }
 
 export interface SceneInput {
@@ -77,6 +79,8 @@ export function computeScene({ palette, song, lineIndex, isPlaying }: SceneInput
     const lineRush = line?.wordsPerSec != null ? clamp((line.wordsPerSec - 2) / 4, 0, 0.5) : 0;
     speed = 0.45 + wpmFactor * 0.9 + lineRush * 0.4 + valence * 0.12;
   }
+  const chorus = Boolean(line?.chorus) && isPlaying;
+  if (chorus) speed *= 1.2;
 
   // --- effects: song themes in the background, current line's themes up front ---
   const effects = noEffects();
@@ -86,12 +90,18 @@ export function computeScene({ palette, song, lineIndex, isPlaying }: SceneInput
   line?.themes.forEach((t) => {
     effects[EFFECT_FOR[t]] = 1;
   });
+  if (chorus) {
+    // The chorus hits harder: every active effect up, plus a little sparkle.
+    for (const e of EFFECTS) effects[e] = Math.min(1, effects[e] * 1.6);
+    effects.sparkles = Math.max(effects.sparkles, 0.35);
+  }
   if (!isPlaying) for (const e of EFFECTS) effects[e] *= 0.4;
 
   return {
     colors: { top, bottom, blobA, blobB, accent, text },
-    speed: clamp(speed, 0.1, 2.2),
-    brightness: clamp(0.75 + valence * 0.3, 0.45, 1.2),
+    speed: clamp(speed, 0.1, 2.4),
+    brightness: clamp(0.75 + valence * 0.3 + (chorus ? 0.18 : 0), 0.45, 1.35),
     effects,
+    chorus,
   };
 }

@@ -16,17 +16,17 @@ const SONGS: DemoSong[] = [
     art: ["#ff2e88", "#3a0ca3", "#00d4ff"],
     lrc: `[00:03.50]Midnight on the highway, city lights in my eyes
 [00:07.50]Rain on the windshield, counting every mile
-[00:11.50]Neon in the puddles, painting all the streets
-[00:15.50]Your heart is the radio, I'm singing every beat
+[00:11.50]We are neon weather, burning through the night
+[00:15.50]Hold on to the thunder, hold on to the light
 [00:19.50]
-[00:21.50]Stars above the skyline, shining through the dark
-[00:25.50]Light a little fire, give the night a spark
-[00:29.50]Gold in the morning, sunshine on the hill
-[00:33.50]Snow on the mountain and the world is standing still
+[00:21.50]Snow on the mountain and the world is standing still
+[00:25.50]Gold in the morning, sunshine on the hill
+[00:29.50]We are neon weather, burning through the night
+[00:33.50]Hold on to the thunder, hold on to the light
 [00:37.50]We were never lonely, we were only cold
-[00:41.50]Hold me in the summer, flowers on the road
-[00:45.50]Diamonds in the river, everything we own
-[00:49.50]Midnight on the highway, driving us home
+[00:41.50]Flowers on the roadside, diamonds in the river
+[00:45.50]We are neon weather, burning through the night
+[00:49.50]Hold on to the thunder, hold on to the light
 [00:54.00]`,
   },
   {
@@ -39,7 +39,7 @@ const SONGS: DemoSong[] = [
 [00:23.00]But the sun comes up and the garden starts to bloom
 [00:28.00]Love is a fire in a quiet little room
 [00:33.00]Love is a fire, love is a fire
-[00:38.00]Love is a fire, burning brighter
+[00:38.00]Love is a fire, love is a fire
 [00:42.00]`,
   },
 ];

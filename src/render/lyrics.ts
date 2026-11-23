@@ -36,6 +36,8 @@ export interface LyricFrame {
   color: RGB;
   glow: RGB;
   pulse: number;
+  /** 0..1, eases in during the chorus: bigger text */
+  chorus?: number;
   title: { name: string; artist: string; shownAt: number } | null;
 }
 
@@ -79,7 +81,7 @@ export class LyricsLayer {
     }
     // Current line: rises into place; pulses slightly on beats.
     if (cur) {
-      const scale = 1 + f.pulse * 0.035;
+      const scale = 1 + f.pulse * 0.035 + (f.chorus ?? 0) * 0.12;
       this.block(ctx, cur, w, cy + base * 0.6 * (1 - t), base * scale, css(f.color, t), f.glow, 0.9 * t, 1);
     }
     // Next line: a quiet preview below.
