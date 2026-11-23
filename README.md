@@ -23,6 +23,8 @@ A live visualizer for whatever you're playing on Spotify. Play a song on any dev
 
 **[Watch the demo](https://liamskillern.github.io/lyric-lights/?demo)** (made-up songs, no Spotify account needed).
 
+📄 **[Full project report](docs/REPORT.md)**: every feature, setting, key, data source, security measure, limit and troubleshooting tip.
+
 ## How it works
 
 ```
