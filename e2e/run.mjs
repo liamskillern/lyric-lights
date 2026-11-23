@@ -260,6 +260,32 @@ try {
     check(!page.url().includes("error="), "error link: removed from the address bar");
     await ctx.close();
   }
+
+  // ---- 7. Beat sync with Chromium's fake mic and fake screen share ----
+  {
+    const b2 = await chromium.launch({
+      args: ["--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream", "--auto-accept-this-tab-capture", "--auto-select-desktop-capture-source=Entire screen"],
+    });
+    const page = await b2.newPage({ viewport: { width: 1280, height: 800 } });
+    const errors = watchErrors(page);
+    await page.goto(`${BASE}?demo`);
+    await page.waitForFunction(() => document.getElementById("np-title")?.textContent !== "");
+    // Mic (M): the fake device plays a beep, so the button should turn on.
+    await page.keyboard.press("m");
+    await page.waitForFunction(() => document.getElementById("btn-mic")?.getAttribute("aria-pressed") === "true", null, { timeout: 5000 }).catch(() => {});
+    check((await page.getAttribute("#btn-mic", "aria-pressed")) === "true", "beat: mic turns on");
+    await page.waitForTimeout(1500);
+    await page.keyboard.press("m");
+    check((await page.getAttribute("#btn-mic", "aria-pressed")) === "false", "beat: turns off again");
+    // System audio (B): headless Chromium shares a screen with no sound, so expect the friendly message.
+    await page.keyboard.press("b");
+    await page.waitForTimeout(2000);
+    const toastText = await page.textContent("#toast");
+    const pressed = await page.getAttribute("#btn-mic", "aria-pressed");
+    check(pressed === "true" || /No sound was shared|can't share|cancelled/.test(toastText ?? ""), `beat: system audio on, or a clear message ("${toastText}")`);
+    check(errors.length === 0, `beat: no console errors ${errors.join(" | ")}`);
+    await b2.close();
+  }
 } finally {
   await browser.close();
   server.kill();

@@ -29,3 +29,39 @@ describe("BeatDetector", () => {
     expect(level).toBeGreaterThan(0);
   });
 });
+
+import { AutoGain, bandEnergy, FlashLimiter } from "../src/audio";
+
+describe("FlashLimiter", () => {
+  it("lets at most 3 flashes through per second", () => {
+    const f = new FlashLimiter(3);
+    let n = 0;
+    for (let t = 0; t < 1000; t += 50) if (f.allow(t)) n++; // 20 beats in a second
+    expect(n).toBe(3);
+  });
+});
+
+describe("bandEnergy", () => {
+  // 48 kHz / 2048 ≈ 23.4 Hz per bin
+  const hz = 48000 / 2048;
+  it("reads only the bins in the range", () => {
+    const bins = new Uint8Array(1024);
+    for (let i = 2; i <= 7; i++) bins[i] = 255; // ≈47–164 Hz
+    expect(bandEnergy(bins, hz, 40, 160)).toBeGreaterThan(0.8);
+    expect(bandEnergy(bins, hz, 4000, 12000)).toBe(0);
+  });
+  it("is 0 for silence and stays in range", () => {
+    expect(bandEnergy(new Uint8Array(1024), hz, 400, 2000)).toBe(0);
+    expect(bandEnergy(new Uint8Array(1024).fill(255), hz, 400, 2000)).toBe(1);
+  });
+});
+
+describe("AutoGain", () => {
+  it("scales quiet music up toward 1 and never passes 1", () => {
+    const g = new AutoGain();
+    let v = 0;
+    for (let i = 0; i < 2000; i++) v = g.push(0.2);
+    expect(v).toBeCloseTo(1, 1);
+    expect(g.push(0.9)).toBe(1);
+  });
+});

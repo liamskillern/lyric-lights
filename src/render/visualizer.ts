@@ -1,5 +1,6 @@
 // Owns the canvas: smooths the scene toward its target every frame and draws the layers.
 
+import { FlashLimiter, SILENT, type Bands } from "../audio";
 import { lerp, mix, type RGB } from "../color";
 import type { LyricLine } from "../lyrics";
 import { EFFECTS, noEffects, type Effect, type SceneColors, type SceneTarget } from "../scene";
@@ -13,8 +14,10 @@ export interface FrameInput {
   lyrics: LyricLine[] | null;
   lineIndex: number;
   beat: boolean;
-  /** mic loudness 0..1 (0 when the mic is off) */
+  /** loudness 0..1 (0 when beat sync is off) */
   level: number;
+  /** bass / mid / treble 0..1 (all 0 when beat sync is off) */
+  bands?: Bands;
 }
 
 interface Smoothed {
@@ -34,6 +37,10 @@ export class Visualizer {
   private lastNow = 0;
   private sceneTime = 0;
   private pulse = 0;
+  private bands: Bands = { ...SILENT };
+  private flashes = new FlashLimiter(3);
+  /** turns off rings and flashes (reduced motion) */
+  allowFlashes = true;
   private art: HTMLCanvasElement | null = null;
   private prevArt: HTMLCanvasElement | null = null;
   private artSince = 0;
@@ -96,9 +103,20 @@ export class Visualizer {
       s.effects[e] = lerp(s.effects[e], goal, goal > s.effects[e] ? kEffectUp : kEffectDown);
     }
 
+    // Bands ease quickly so they feel live but don't jitter.
+    const kBand = 1 - Math.exp(-dt * 14);
+    const b = input.bands ?? SILENT;
+    this.bands = {
+      bass: lerp(this.bands.bass, b.bass, kBand),
+      mid: lerp(this.bands.mid, b.mid, kBand),
+      treble: lerp(this.bands.treble, b.treble, kBand),
+    };
+
     if (input.beat) {
       this.pulse = 1;
-      this.effects.beat(0.6 + input.level * 0.6);
+      // The gentle pulse follows every beat; rings (a visible flash) max 3 per second.
+      const ring = this.allowFlashes && this.flashes.allow(now);
+      this.effects.beat(0.6 + input.level * 0.6, ring);
     }
     this.pulse *= Math.exp(-dt * 6);
     this.sceneTime += dt * s.speed;
@@ -115,12 +133,13 @@ export class Visualizer {
       colors: s.colors,
       brightness: s.brightness,
       pulse: this.pulse,
+      bass: this.bands.bass,
       t: this.sceneTime * 6,
       art: this.art,
       prevArt: this.prevArt,
       artAlpha: Math.min(1, (now - this.artSince) / 1500),
     });
-    this.effects.draw(ctx, s.effects, s.colors, now / 1000, s.brightness);
+    this.effects.draw(ctx, s.effects, s.colors, now / 1000, s.brightness * (1 + this.bands.mid * 0.25), this.bands.treble);
 
     if (this.showLyrics) {
       this.lyricsLayer.draw(ctx, this.w, this.h, {

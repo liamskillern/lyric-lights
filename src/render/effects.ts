@@ -63,8 +63,8 @@ export class Effects {
     if (first) this.ps = []; // dust gets created in update()
   }
 
-  beat(strength = 1): void {
-    this.rings.push({ r: 0, alpha: 0.28 * strength });
+  beat(strength = 1, ring = true): void {
+    if (ring) this.rings.push({ r: 0, alpha: 0.28 * strength });
     // Push the dust outward from the center.
     const cx = this.w / 2;
     const cy = this.h / 2;
@@ -136,7 +136,7 @@ export class Effects {
     this.rings = this.rings.filter((r) => r.alpha > 0.01);
   }
 
-  draw(ctx: CanvasRenderingContext2D, intensity: Record<Effect, number>, colors: SceneColors, time: number, brightness: number): void {
+  draw(ctx: CanvasRenderingContext2D, intensity: Record<Effect, number>, colors: SceneColors, time: number, brightness: number, treble = 0): void {
     const { w, h } = this;
 
     // Stars: a fixed field that fades with intensity.
@@ -159,7 +159,7 @@ export class Effects {
         case "dust": {
           const tw = 0.5 + 0.5 * Math.sin(time * 0.8 + p.seed);
           // Dust follows the live palette so it recolors when the song changes.
-          ctx.fillStyle = css(p.seed < 50 ? colors.blobA : colors.text, (0.12 + 0.25 * tw) * brightness);
+          ctx.fillStyle = css(p.seed < 50 ? colors.blobA : colors.text, (0.12 + 0.25 * tw + treble * 0.35 * tw) * brightness);
           ctx.beginPath();
           ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
           ctx.fill();

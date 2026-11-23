@@ -24,6 +24,8 @@ export interface BackgroundState {
   brightness: number;
   /** 0..1, a quick swell on each beat */
   pulse: number;
+  /** 0..1 live bass level (0 without beat sync) */
+  bass?: number;
   /** seconds of "scene time" (advances faster when the music is faster) */
   t: number;
   art: HTMLCanvasElement | null;
@@ -61,7 +63,7 @@ export function drawBackground(ctx: CanvasRenderingContext2D, w: number, h: numb
 
   // Glowing blobs drifting on slow looping paths.
   ctx.globalCompositeOperation = "screen";
-  const R = Math.max(w, h);
+  const R = Math.max(w, h) * (1 + (s.bass ?? 0) * 0.18);
   blob(ctx, w * (0.3 + 0.18 * Math.sin(t * 0.11)), h * (0.35 + 0.15 * Math.cos(t * 0.09)), R * 0.45 * (1 + s.pulse * 0.12), colors.blobA, 0.38 * s.brightness);
   blob(ctx, w * (0.72 + 0.15 * Math.cos(t * 0.08)), h * (0.65 + 0.18 * Math.sin(t * 0.12)), R * 0.4 * (1 + s.pulse * 0.1), colors.blobB, 0.32 * s.brightness);
   blob(ctx, w * (0.5 + 0.3 * Math.sin(t * 0.05 + 2)), h * (0.5 + 0.3 * Math.cos(t * 0.06 + 1)), R * 0.25, colors.accent, 0.16 * s.brightness);

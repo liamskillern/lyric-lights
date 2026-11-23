@@ -1,5 +1,5 @@
 import "./style.css";
-import { MicListener } from "./audio";
+import { AudioInput, canCaptureSystemAudio, NoAudioSharedError, type AudioSource } from "./audio";
 import * as auth from "./auth";
 import { createDemo, type DemoSource } from "./demo";
 import { isFramed } from "./frame";
@@ -51,7 +51,11 @@ function toast(msg: string, ms = 2600): void {
 
 const isDemo = new URLSearchParams(location.search).has("demo");
 const viz = new Visualizer(canvas);
-const mic = new MicListener();
+const audio = new AudioInput();
+audio.onEnded = () => {
+  btnMic.setAttribute("aria-pressed", "false");
+  toast("Beat sync off (sharing stopped)");
+};
 
 const state = {
   playback: NOTHING_PLAYING as Playback,
@@ -264,8 +268,8 @@ function loop(now: number): void {
     });
   }
 
-  mic.update(now);
-  viz.frame({ now, target: lastScene, lyrics: lines, lineIndex: idx, beat: mic.beat, level: mic.level });
+  audio.update(now);
+  viz.frame({ now, target: lastScene, lyrics: lines, lineIndex: idx, beat: audio.beat, level: audio.level, bands: audio.bands });
   requestAnimationFrame(loop);
 }
 
@@ -276,19 +280,39 @@ function toggleLyrics(): void {
   btnLyrics.setAttribute("aria-pressed", String(viz.showLyrics));
 }
 
-async function toggleMic(): Promise<void> {
-  if (mic.active) {
-    mic.stop();
+/** Best beat source for this device: the computer's sound if the browser can share it, else the mic. */
+function defaultBeatSource(): AudioSource {
+  return canCaptureSystemAudio() ? "system" : "mic";
+}
+
+async function toggleBeat(source: AudioSource = defaultBeatSource()): Promise<void> {
+  if (audio.active) {
+    audio.stop();
     btnMic.setAttribute("aria-pressed", "false");
     toast("Beat sync off");
     return;
   }
+  if (source === "system") {
+    toast("In the share window: pick Entire screen and tick \"Also share system audio\" (or share the tab playing music).", 9000);
+  }
   try {
-    await mic.start();
+    await audio.start(source);
     btnMic.setAttribute("aria-pressed", "true");
-    toast("Listening for the beat. Play the music out loud near this device.", 4000);
-  } catch {
-    toast("Couldn't use the microphone (permission denied or no mic).", 4000);
+    toast(
+      source === "system"
+        ? "Beat sync on. Only the sound is used; the screen picture is thrown away right away."
+        : "Beat sync on. Play the music out loud near this device.",
+      4500,
+    );
+  } catch (err) {
+    btnMic.setAttribute("aria-pressed", "false");
+    if (err instanceof NoAudioSharedError) {
+      toast("No sound was shared. Try again and tick \"Also share system audio\" (Chrome or Edge on a computer).", 7000);
+    } else if ((err as Error).name === "NotAllowedError") {
+      toast(source === "system" ? "Sharing was cancelled." : "Microphone permission was denied.", 4000);
+    } else {
+      toast(source === "system" ? "This browser can't share its sound. Try the microphone instead." : "Couldn't use the microphone.", 5000);
+    }
   }
 }
 
@@ -309,11 +333,11 @@ function nudgeLyrics(deltaMs: number): void {
 }
 
 btnLyrics.addEventListener("click", toggleLyrics);
-btnMic.addEventListener("click", () => void toggleMic());
+btnMic.addEventListener("click", () => void toggleBeat());
 btnFull.addEventListener("click", () => void toggleFullscreen());
 btnLogout.addEventListener("click", () => {
   poller?.stop();
-  mic.stop();
+  audio.stop();
   void wakeLock?.release();
   auth.logout();
   showLogin(undefined, true);
@@ -323,7 +347,8 @@ window.addEventListener("keydown", (e) => {
   if (!panel.hidden || e.ctrlKey || e.metaKey || e.altKey) return;
   const k = e.key.toLowerCase();
   if (k === "l") toggleLyrics();
-  else if (k === "m") void toggleMic();
+  else if (k === "b") void toggleBeat();
+  else if (k === "m") void toggleBeat("mic");
   else if (k === "f") void toggleFullscreen();
   else if (k === "]") nudgeLyrics(100);
   else if (k === "[") nudgeLyrics(-100);
