@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#0b0a1a" />
+    <meta name="description" content="A live visualizer for whatever you're playing on Spotify, shaped by the album art and the lyrics." />
+    <meta name="referrer" content="no-referrer" />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%23ff2e88'/%3E%3Cstop offset='1' stop-color='%2300d4ff'/%3E%3C/linearGradient%3E%3C/defs%3E%3Ccircle cx='16' cy='16' r='14' fill='url(%23g)'/%3E%3Cpath d='M9 19h14M11 14h10' stroke='white' stroke-width='2.5' stroke-linecap='round'/%3E%3C/svg%3E" />
+    <title>Lyric Lights</title>
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <canvas id="stage" aria-label="Music visualizer"></canvas>
+
+    <main id="panel" class="panel" hidden></main>
+
+    <p id="hint" class="hint" hidden></p>
+
+    <div id="hud" class="hud" hidden>
+      <div class="now-playing">
+        <img id="thumb" alt="" width="56" height="56" />
+        <div class="np-text">
+          <div id="np-title" class="np-title"></div>
+          <div id="np-artist" class="np-artist"></div>
+          <div id="np-status" class="np-status"></div>
+        </div>
+      </div>
+      <nav class="controls" aria-label="Visualizer controls">
+        <button id="btn-lyrics" type="button" aria-pressed="true" title="Show or hide lyrics (L)">Lyrics</button>
+        <button id="btn-mic" type="button" aria-pressed="false" title="Pulse to the beat using your microphone (M)">Beat (mic)</button>
+        <button id="btn-full" type="button" title="Full screen (F)">Full screen</button>
+        <button id="btn-logout" type="button" title="Disconnect Spotify">Log out</button>
+      </nav>
+    </div>
+
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

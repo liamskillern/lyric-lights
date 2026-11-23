@@ -1,0 +1,25 @@
+{
+  "name": "lyric-lights",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Live visualizer for whatever you're playing on Spotify, shaped by the album art and the lyrics.",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1 --port 5173 --strictPort",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview --host 127.0.0.1 --port 5173 --strictPort",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "e2e": "npm run build && node e2e/run.mjs"
+  },
+  "dependencies": {
+    "sentiment": "^5.0.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/sentiment": "^5.0.4",
+    "typescript": "~5.9.3",
+    "vite": "^8.3.8",
+    "vitest": "^4.1.12"
+  }
+}

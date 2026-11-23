@@ -1,0 +1,414 @@
+import "./style.css";
+import { MicListener } from "./audio";
+import * as auth from "./auth";
+import { createDemo, type DemoSource } from "./demo";
+import { fetchLyrics, lineIndexAt, type LyricLine, type Lyrics } from "./lyrics";
+import { analyzeSong, analyzeText, type SongMood } from "./mood";
+import { DEFAULT_PALETTE, paletteFromImage, paletteFromUrl, type Palette } from "./palette";
+import { computeScene, type SceneTarget } from "./scene";
+import { NOTHING_PLAYING, positionAt, SpotifyPoller, type Playback, type Track } from "./spotify";
+import { Visualizer } from "./render/visualizer";
+
+// ---------- DOM ----------
+
+const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
+const canvas = $<HTMLCanvasElement>("stage");
+const panel = $("panel");
+const hud = $("hud");
+const hint = $("hint");
+const toastEl = $("toast");
+const thumb = $<HTMLImageElement>("thumb");
+const npTitle = $("np-title");
+const npArtist = $("np-artist");
+const npStatus = $("np-status");
+const btnLyrics = $<HTMLButtonElement>("btn-lyrics");
+const btnMic = $<HTMLButtonElement>("btn-mic");
+const btnFull = $<HTMLButtonElement>("btn-full");
+const btnLogout = $<HTMLButtonElement>("btn-logout");
+
+/** Tiny element builder. Text always goes in as textContent, never as HTML. */
+function h<K extends keyof HTMLElementTagNameMap>(
+  tag: K,
+  props: Partial<HTMLElementTagNameMap[K]> & { className?: string } = {},
+  ...children: (Node | string)[]
+): HTMLElementTagNameMap[K] {
+  const el = Object.assign(document.createElement(tag), props);
+  el.append(...children);
+  return el;
+}
+
+let toastTimer = 0;
+function toast(msg: string, ms = 2600): void {
+  toastEl.textContent = msg;
+  toastEl.classList.add("show");
+  clearTimeout(toastTimer);
+  toastTimer = window.setTimeout(() => toastEl.classList.remove("show"), ms);
+}
+
+// ---------- state ----------
+
+const isDemo = new URLSearchParams(location.search).has("demo");
+const viz = new Visualizer(canvas);
+const mic = new MicListener();
+
+const state = {
+  playback: NOTHING_PLAYING as Playback,
+  trackId: null as string | null,
+  lyrics: { kind: "none" } as Lyrics,
+  syncedLines: null as LyricLine[] | null,
+  song: null as SongMood | null,
+  palette: DEFAULT_PALETTE as Palette,
+  loadToken: 0,
+  lyricOffsetMs: Number(readPref("sv.lyricOffset") ?? 0) || 0,
+};
+
+let demo: DemoSource | null = null;
+let poller: SpotifyPoller | null = null;
+let lyricAbort: AbortController | null = null;
+
+// ---------- screens ----------
+
+function showPanel(...content: Node[]): void {
+  panel.replaceChildren(h("div", { className: "card" }, ...content));
+  panel.hidden = false;
+  hud.hidden = true;
+  hint.hidden = true;
+}
+
+function showSetup(error?: string): void {
+  const uri = auth.redirectUri();
+  const input = h("input", { type: "text", placeholder: "Paste your Client ID", autocomplete: "off", spellcheck: false });
+  input.setAttribute("aria-label", "Spotify Client ID");
+  const err = h("p", { className: "error" }, error ?? "");
+  err.hidden = !error;
+  const save = h("button", { className: "primary", type: "button" }, "Save and connect");
+  save.addEventListener("click", () => {
+    if (!auth.isValidClientId(input.value)) {
+      err.textContent = "That doesn't look like a Client ID (32 letters and numbers).";
+      err.hidden = false;
+      return;
+    }
+    auth.setClientId(input.value);
+    void auth.beginLogin(input.value.trim());
+  });
+  const copy = h("button", { className: "small", type: "button" }, "Copy");
+  copy.addEventListener("click", () => {
+    void navigator.clipboard?.writeText(uri).then(() => toast("Redirect URI copied"));
+  });
+
+  showPanel(
+    h("h1", {}, "Lyric Lights"),
+    h("p", {}, "One-time setup: this app talks to Spotify through your own free Spotify developer app."),
+    h(
+      "ol",
+      {},
+      h("li", {}, "Open ", link("https://developer.spotify.com/dashboard", "developer.spotify.com/dashboard"), " and click Create app."),
+      h("li", {}, "Add this Redirect URI exactly:", h("div", { className: "copy-row" }, h("code", {}, uri), copy)),
+      h("li", {}, "Tick Web API, save, and copy the Client ID from the app's settings."),
+    ),
+    h("div", { className: "row" }, input, save),
+    err,
+    h("p", { className: "fine-print" }, "No Spotify account handy? ", link("?demo", "Watch the demo"), "."),
+  );
+  input.focus();
+}
+
+function showLogin(error?: string): void {
+  const btn = h("button", { className: "primary", type: "button" }, "Connect Spotify");
+  btn.addEventListener("click", () => {
+    const id = auth.getClientId();
+    if (id) void auth.beginLogin(id);
+    else showSetup();
+  });
+  const change = h("button", { className: "small", type: "button" }, "Use a different Client ID");
+  change.addEventListener("click", () => showSetup());
+
+  const content: Node[] = [
+    h("h1", {}, "Lyric Lights"),
+    h("p", {}, "Play a song on Spotify anywhere (phone, computer, speaker) and this screen turns it into light: colors from the album art, effects from the lyrics."),
+  ];
+  if (error) content.push(h("p", { className: "error" }, error));
+  content.push(
+    h("div", { className: "row" }, btn, h("a", { className: "button", href: "?demo" }, "Watch the demo")),
+    h("div", { className: "row" }, change),
+    h("p", { className: "fine-print" }, "Your login stays in this browser. There's no server: the page talks straight to Spotify and LRCLIB (for lyrics)."),
+  );
+  showPanel(...content);
+}
+
+function link(href: string, text: string): HTMLAnchorElement {
+  const external = href.startsWith("http");
+  return h("a", { href, target: external ? "_blank" : "", rel: external ? "noopener noreferrer" : "" }, text);
+}
+
+function showVisualizer(): void {
+  panel.hidden = true;
+  hud.hidden = false;
+  btnLogout.hidden = isDemo;
+}
+
+// ---------- track changes ----------
+
+function onPlayback(p: Playback): void {
+  state.playback = p;
+  const id = p.track?.id ?? null;
+  if (id !== state.trackId) void onTrackChange(p.track);
+  hint.hidden = p.track !== null;
+  if (!p.track) hint.textContent = "Play something on Spotify (your phone, computer, anywhere) and it'll show up here.";
+}
+
+async function onTrackChange(track: Track | null): Promise<void> {
+  state.trackId = track?.id ?? null;
+  const token = ++state.loadToken;
+  lyricAbort?.abort();
+  lyricAbort = new AbortController();
+
+  state.lyrics = { kind: "none" };
+  state.syncedLines = null;
+  state.song = null;
+  npStatus.textContent = "";
+
+  if (!track) {
+    npTitle.textContent = "Nothing playing";
+    npArtist.textContent = "";
+    thumb.removeAttribute("src");
+    return;
+  }
+
+  npTitle.textContent = track.name;
+  npArtist.textContent = track.artists.join(", ");
+  document.title = `${track.name} · Lyric Lights`;
+  viz.showTitle(track.name, track.artists.join(", "));
+  npStatus.textContent = "Finding lyrics…";
+
+  const titleText = `${track.name} ${track.album}`;
+
+  // Colors and lyrics load in parallel.
+  const colorJob = (async () => {
+    if (demo) {
+      const art = demo.artFor(track.id);
+      thumb.src = demo.thumbFor(track.id) ?? "";
+      return { palette: art ? paletteFromImage(art) : DEFAULT_PALETTE, image: art as CanvasImageSource | null };
+    }
+    if (track.thumbUrl) thumb.src = track.thumbUrl;
+    if (!track.artUrl) return { palette: DEFAULT_PALETTE, image: null };
+    return paletteFromUrl(track.artUrl);
+  })();
+
+  const lyricJob = demo
+    ? Promise.resolve(demo.lyricsFor(track.id))
+    : fetchLyrics(track, lyricAbort.signal).catch((): Lyrics => ({ kind: "none" }));
+
+  const { palette, image } = await colorJob;
+  if (token !== state.loadToken) return;
+  state.palette = palette;
+  viz.setArt(image);
+
+  const lyrics = await lyricJob;
+  if (token !== state.loadToken) return;
+  state.lyrics = lyrics;
+  switch (lyrics.kind) {
+    case "synced":
+      state.syncedLines = lyrics.lines;
+      state.song = analyzeSong(lyrics.lines, titleText);
+      npStatus.textContent = "";
+      break;
+    case "plain":
+      state.song = analyzeText(lyrics.text, titleText);
+      npStatus.textContent = "Lyrics found but not time-synced: mood only";
+      break;
+    case "instrumental":
+      state.song = analyzeText("", titleText);
+      npStatus.textContent = "Instrumental";
+      break;
+    case "none":
+      state.song = analyzeText("", titleText);
+      npStatus.textContent = "No lyrics found: colors only";
+      break;
+  }
+}
+
+// ---------- frame loop ----------
+
+let lastSceneKey = "";
+let lastScene: SceneTarget | null = null;
+const LEAD_MS = 150; // show a line just before it's sung
+
+function loop(now: number): void {
+  if (demo) {
+    const p = demo.playback(now);
+    if (p.track?.id !== state.trackId || !state.playback.track) onPlayback(p);
+    else state.playback = p;
+  }
+
+  const pos = positionAt(state.playback, now);
+  const lines = state.syncedLines;
+  const idx = lines ? lineIndexAt(lines, pos + LEAD_MS + state.lyricOffsetMs) : -1;
+
+  // Only recompute the scene when its inputs change.
+  const key = `${state.loadToken}|${idx}|${state.playback.isPlaying}|${state.song ? 1 : 0}|${state.palette === DEFAULT_PALETTE}`;
+  if (key !== lastSceneKey || !lastScene) {
+    lastSceneKey = key;
+    lastScene = computeScene({
+      palette: state.palette,
+      song: state.song,
+      lineIndex: idx,
+      isPlaying: state.playback.isPlaying,
+    });
+  }
+
+  mic.update(now);
+  viz.frame({ now, target: lastScene, lyrics: lines, lineIndex: idx, beat: mic.beat, level: mic.level });
+  requestAnimationFrame(loop);
+}
+
+// ---------- controls ----------
+
+function toggleLyrics(): void {
+  viz.showLyrics = !viz.showLyrics;
+  btnLyrics.setAttribute("aria-pressed", String(viz.showLyrics));
+}
+
+async function toggleMic(): Promise<void> {
+  if (mic.active) {
+    mic.stop();
+    btnMic.setAttribute("aria-pressed", "false");
+    toast("Beat sync off");
+    return;
+  }
+  try {
+    await mic.start();
+    btnMic.setAttribute("aria-pressed", "true");
+    toast("Listening for the beat. Play the music out loud near this device.", 4000);
+  } catch {
+    toast("Couldn't use the microphone (permission denied or no mic).", 4000);
+  }
+}
+
+async function toggleFullscreen(): Promise<void> {
+  try {
+    if (document.fullscreenElement) await document.exitFullscreen();
+    else await document.documentElement.requestFullscreen();
+  } catch {
+    toast("Full screen isn't available here.");
+  }
+}
+
+function nudgeLyrics(deltaMs: number): void {
+  state.lyricOffsetMs = Math.max(-3000, Math.min(3000, state.lyricOffsetMs + deltaMs));
+  writePref("sv.lyricOffset", String(state.lyricOffsetMs));
+  const s = (state.lyricOffsetMs / 1000).toFixed(1);
+  toast(state.lyricOffsetMs === 0 ? "Lyric timing: normal" : `Lyric timing: ${state.lyricOffsetMs > 0 ? "+" : ""}${s}s earlier`);
+}
+
+btnLyrics.addEventListener("click", toggleLyrics);
+btnMic.addEventListener("click", () => void toggleMic());
+btnFull.addEventListener("click", () => void toggleFullscreen());
+btnLogout.addEventListener("click", () => {
+  poller?.stop();
+  mic.stop();
+  void wakeLock?.release();
+  auth.logout();
+  location.reload();
+});
+
+window.addEventListener("keydown", (e) => {
+  if (!panel.hidden || e.ctrlKey || e.metaKey || e.altKey) return;
+  const k = e.key.toLowerCase();
+  if (k === "l") toggleLyrics();
+  else if (k === "m") void toggleMic();
+  else if (k === "f") void toggleFullscreen();
+  else if (k === "]") nudgeLyrics(100);
+  else if (k === "[") nudgeLyrics(-100);
+  else if (k === "0") nudgeLyrics(-state.lyricOffsetMs);
+});
+
+// Hide the controls and cursor when the mouse is still.
+let idleTimer = 0;
+function wake(): void {
+  hud.classList.remove("idle");
+  document.body.classList.remove("idle");
+  clearTimeout(idleTimer);
+  idleTimer = window.setTimeout(() => {
+    if (!hud.hidden) {
+      hud.classList.add("idle");
+      document.body.classList.add("idle");
+    }
+  }, 3500);
+}
+["pointermove", "pointerdown", "keydown"].forEach((ev) => window.addEventListener(ev, wake, { passive: true }));
+
+// Keep the screen awake while visualizing (phones, TVs).
+let wakeLock: { release(): Promise<void> } | null = null;
+async function keepAwake(): Promise<void> {
+  try {
+    const nav = navigator as Navigator & { wakeLock?: { request(type: "screen"): Promise<{ release(): Promise<void> }> } };
+    if (nav.wakeLock && document.visibilityState === "visible") wakeLock = await nav.wakeLock.request("screen");
+  } catch {
+    wakeLock = null;
+  }
+}
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible" && !hud.hidden) void keepAwake();
+});
+
+// ---------- prefs ----------
+
+function readPref(key: string): string | null {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+function writePref(key: string, value: string): void {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    /* fine: just won't be remembered */
+  }
+}
+
+// ---------- start ----------
+
+async function start(): Promise<void> {
+  requestAnimationFrame(loop);
+
+  if (isDemo) {
+    demo = createDemo();
+    showVisualizer();
+    void keepAwake();
+    wake();
+    toast("Demo mode: made-up songs, no Spotify needed", 3500);
+    return;
+  }
+
+  const clientId = auth.getClientId();
+  if (!clientId) return showSetup();
+
+  const redirect = await auth.handleRedirect(clientId);
+  if (redirect.kind === "error") return showLogin(redirect.message);
+  if (!auth.isLoggedIn()) return showLogin();
+
+  showVisualizer();
+  void keepAwake();
+  wake();
+  hint.hidden = false;
+  hint.textContent = "Connecting to Spotify…";
+
+  poller = new SpotifyPoller({
+    getToken: () => auth.getAccessToken(clientId),
+    onRefreshNeeded: () => auth.forceRefresh(clientId),
+    onPlayback,
+    onError: (msg) => {
+      if (msg) toast(msg, 5000);
+    },
+    onLoggedOut: () => {
+      poller?.stop();
+      showLogin("Your Spotify session ended. Please connect again.");
+    },
+  });
+  poller.start();
+}
+
+void start();
