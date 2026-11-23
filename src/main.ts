@@ -7,7 +7,7 @@ import { fetchLyrics, lineIndexAt, type LyricLine, type Lyrics } from "./lyrics"
 import { analyzeSong, analyzeText, type SongMood } from "./mood";
 import { DEFAULT_PALETTE, paletteFromImage, paletteFromUrl, type Palette } from "./palette";
 import { computeScene, type SceneTarget } from "./scene";
-import { NOTHING_PLAYING, positionAt, SpotifyPoller, type Playback, type Track } from "./spotify";
+import { formatTime, NOTHING_PLAYING, positionAt, SpotifyPoller, type Playback, type Track } from "./spotify";
 import { local } from "./storage";
 import { Visualizer } from "./render/visualizer";
 
@@ -27,6 +27,13 @@ const btnLyrics = $<HTMLButtonElement>("btn-lyrics");
 const btnMic = $<HTMLButtonElement>("btn-mic");
 const btnFull = $<HTMLButtonElement>("btn-full");
 const btnLogout = $<HTMLButtonElement>("btn-logout");
+const npTime = $("np-time");
+const progressEl = $("progress");
+const progressFill = $("progress-fill");
+const upnext = $("upnext");
+const upnextArt = $<HTMLImageElement>("upnext-art");
+const upnextTitle = $("upnext-title");
+const upnextArtist = $("upnext-artist");
 
 /** Tiny element builder. Text always goes in as textContent, never as HTML. */
 function h<K extends keyof HTMLElementTagNameMap>(
@@ -65,6 +72,9 @@ const state = {
   song: null as SongMood | null,
   palette: DEFAULT_PALETTE as Palette,
   loadToken: 0,
+  /** next song in the queue, if known */
+  next: null as Track | null,
+  showUpNext: true,
   lyricOffsetMs: Number(local.get("sv.lyricOffset") ?? 0) || 0,
 };
 
@@ -168,8 +178,41 @@ function onPlayback(p: Playback): void {
   if (!p.track) hint.textContent = "Play something on Spotify (your phone, computer, anywhere) and it'll show up here.";
 }
 
+function setNext(next: Track | null): void {
+  state.next = next;
+  if (!next) return;
+  upnextTitle.textContent = next.name;
+  upnextArtist.textContent = next.artists.join(", ");
+  const thumb = demo ? demo.thumbFor(next.id) : next.thumbUrl;
+  if (thumb) upnextArt.src = thumb;
+  else upnextArt.removeAttribute("src");
+}
+
+let lastHudUpdate = 0;
+/** Progress line, time and the Up next card. A few times a second is plenty. */
+function updateProgress(now: number, pos: number): void {
+  if (now - lastHudUpdate < 250) return;
+  lastHudUpdate = now;
+  const t = state.playback.track;
+  progressEl.hidden = !t || !t.durationMs;
+  if (!t || !t.durationMs) {
+    npTime.textContent = "";
+    upnext.classList.remove("show");
+    return;
+  }
+  // Set via the style object (CSSOM), which the Content-Security-Policy allows.
+  progressFill.style.transform = `scaleX(${Math.min(1, pos / t.durationMs).toFixed(4)})`;
+  npTime.textContent = `${formatTime(pos)} / ${formatTime(t.durationMs)}`;
+  const left = t.durationMs - pos;
+  const show = state.showUpNext && state.playback.isPlaying && left < 15_000 && !!state.next && state.next.id !== t.id;
+  upnext.hidden = false;
+  upnext.classList.toggle("show", show);
+}
+
 async function onTrackChange(track: Track | null): Promise<void> {
   state.trackId = track?.id ?? null;
+  upnext.classList.remove("show");
+  setNext(demo && track ? demo.nextAfter(track.id) : null);
   const token = ++state.loadToken;
   lyricAbort?.abort();
   lyricAbort = new AbortController();
@@ -268,6 +311,7 @@ function loop(now: number): void {
     });
   }
 
+  updateProgress(now, pos);
   audio.update(now);
   viz.frame({ now, target: lastScene, lyrics: lines, lineIndex: idx, beat: audio.beat, level: audio.level, bands: audio.bands });
   requestAnimationFrame(loop);
@@ -428,6 +472,7 @@ async function start(): Promise<void> {
     getToken: () => auth.getAccessToken(clientId),
     onRefreshNeeded: () => auth.forceRefresh(clientId),
     onPlayback,
+    onQueue: (next) => setNext(next),
     onError: (msg) => {
       if (msg) toast(msg, 5000);
     },

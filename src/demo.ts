@@ -71,6 +71,8 @@ export interface DemoSource {
   lyricsFor(trackId: string): Lyrics;
   artFor(trackId: string): HTMLCanvasElement | null;
   thumbFor(trackId: string): string | null;
+  /** the song after this one (demo songs loop) */
+  nextAfter(trackId: string): Track | null;
 }
 
 export function createDemo(start = performance.now()): DemoSource {
@@ -93,6 +95,10 @@ export function createDemo(start = performance.now()): DemoSource {
     },
     artFor(id) {
       return arts.get(id) ?? null;
+    },
+    nextAfter(id) {
+      const i = SONGS.findIndex((s) => s.track.id === id);
+      return i < 0 ? null : SONGS[(i + 1) % SONGS.length].track;
     },
     thumbFor(id) {
       if (!thumbs.has(id)) {

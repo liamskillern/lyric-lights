@@ -47,3 +47,39 @@ describe("positionAt", () => {
   it("stays put while paused", () => expect(positionAt({ ...p, isPlaying: false }, 3000)).toBe(30_000));
   it("never passes the end of the song", () => expect(positionAt(p, 10_000_000)).toBe(200_000));
 });
+
+import { formatTime, parseQueue, trackFromItem } from "../src/spotify";
+
+describe("parseQueue", () => {
+  const track = (id: string) => ({ type: "track", id, name: `Song ${id}`, duration_ms: 1000, artists: [{ name: "A" }], album: { name: "B", images: [] } });
+  it("returns the first track in the queue", () => {
+    expect(parseQueue({ queue: [track("n1"), track("n2")] })?.id).toBe("n1");
+  });
+  it("skips podcast episodes", () => {
+    expect(parseQueue({ queue: [{ type: "episode", id: "e", name: "Pod" }, track("n2")] })?.id).toBe("n2");
+  });
+  it("returns null for an empty or broken queue", () => {
+    expect(parseQueue({ queue: [] })).toBeNull();
+    expect(parseQueue({ queue: "nope" })).toBeNull();
+    expect(parseQueue(null)).toBeNull();
+    expect(parseQueue({ queue: [null, 42, { type: "track" }] })).toBeNull();
+  });
+});
+
+describe("trackFromItem", () => {
+  it("ignores junk inside a track", () => {
+    const t = trackFromItem({ id: "x", name: "S", artists: [{ name: "A" }, null, { name: 5 }], album: { images: [null, { url: "u", width: 300 }] } });
+    expect(t?.artists).toEqual(["A"]);
+    expect(t?.artUrl).toBe("u");
+    expect(t?.durationMs).toBe(0);
+  });
+});
+
+describe("formatTime", () => {
+  it("formats minutes and seconds", () => {
+    expect(formatTime(83_000)).toBe("1:23");
+    expect(formatTime(5_000)).toBe("0:05");
+    expect(formatTime(-1)).toBe("0:00");
+    expect(formatTime(3_600_000)).toBe("60:00");
+  });
+});

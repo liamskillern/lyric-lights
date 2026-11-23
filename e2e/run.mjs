@@ -261,6 +261,44 @@ try {
     await ctx.close();
   }
 
+  // ---- 8. Progress bar and "Up next" near the end of a song ----
+  {
+    const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+    await ctx.addInitScript(() => {
+      localStorage.setItem("sv.clientId", "0123456789abcdef0123456789abcdef");
+      sessionStorage.setItem("sv.refresh", "r");
+    });
+    await ctx.route("https://accounts.spotify.com/api/token", (r) =>
+      r.fulfill({ status: 200, contentType: "application/json", headers: { "access-control-allow-origin": "*" }, body: JSON.stringify({ access_token: "a", expires_in: 3600 }) }),
+    );
+    await ctx.route("https://lrclib.net/**", (r) => r.fulfill({ status: 404, headers: { "access-control-allow-origin": "*" }, body: "" }));
+    const started = Date.now();
+    let queueCalls = 0;
+    const item = (id, name) => ({ type: "track", id, name, duration_ms: 180000, artists: [{ name: "Queue Artist" }], album: { name: "Q", images: [] } });
+    await ctx.route("https://api.spotify.com/**", (route) => {
+      const url = route.request().url();
+      const body = url.includes("/queue")
+        ? (queueCalls++, { currently_playing: item("now", "Now"), queue: [{ type: "episode", id: "pod", name: "A Podcast" }, item("next-1", "The Next Song")] })
+        : { is_playing: true, progress_ms: 170000 + (Date.now() - started), currently_playing_type: "track", item: item("now", "Almost Over") };
+      route.fulfill({ status: 200, contentType: "application/json", headers: { "access-control-allow-origin": "*" }, body: JSON.stringify(body) });
+    });
+    const page = await ctx.newPage();
+    const errors = watchErrors(page);
+    await page.goto(BASE);
+    await page.waitForSelector("#upnext.show", { timeout: 8000 }).catch(() => {});
+    check(await page.isVisible("#upnext.show"), "up next: card shows in the last 15 seconds");
+    check((await page.textContent("#upnext-title")) === "The Next Song", "up next: skips the podcast, shows the next song");
+    check(/^2:5\d \/ 3:00$/.test((await page.textContent("#np-time")) ?? ""), `progress: time shown (${await page.textContent("#np-time")})`);
+    const fill = await page.$eval("#progress-fill", (el) => el.style.transform);
+    check(/scaleX\(0\.9[4-9]/.test(fill), `progress: bar near the end (${fill})`);
+    check(queueCalls >= 1 && queueCalls <= 2, `up next: queue asked only once or twice (${queueCalls})`);
+    await page.screenshot({ path: `${OUT}upnext.png` });
+    // LRCLIB answers 404 for "no lyrics" (mocked here); the browser logs that, which is expected.
+    const real = errors.filter((e) => !e.includes("status of 404"));
+    check(real.length === 0, `up next: no console errors ${real.join(" | ")}`);
+    await ctx.close();
+  }
+
   // ---- 7. Beat sync with Chromium's fake mic and fake screen share ----
   {
     const b2 = await chromium.launch({

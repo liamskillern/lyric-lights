@@ -273,6 +273,106 @@ body.idle {
   color: #111;
 }
 
+.np-time {
+  color: var(--muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  margin-top: 2px;
+}
+
+.np-time:empty {
+  display: none;
+}
+
+/* Thin song progress line along the bottom edge (stays visible when the controls hide). */
+.progress {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 3px;
+  background: rgb(255 255 255 / 0.08);
+  pointer-events: none;
+}
+
+.progress-fill {
+  height: 100%;
+  width: 100%;
+  background: rgb(255 255 255 / 0.55);
+  transform-origin: left center;
+  transform: scaleX(0);
+}
+
+.upnext {
+  position: fixed;
+  right: max(16px, env(safe-area-inset-right));
+  bottom: max(20px, env(safe-area-inset-bottom));
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  max-width: min(320px, calc(100vw - 32px));
+  padding: 8px 14px 8px 8px;
+  background: var(--glass);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  opacity: 0;
+  transform: translateY(16px);
+  transition: opacity 0.6s, transform 0.6s;
+  pointer-events: none;
+}
+
+.upnext.show {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.upnext img {
+  width: 48px;
+  height: 48px;
+  border-radius: 8px;
+  object-fit: cover;
+  background: rgb(255 255 255 / 0.06);
+}
+
+.upnext-text {
+  min-width: 0;
+}
+
+.upnext-label {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.upnext-title,
+.upnext-artist {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.upnext-title {
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.upnext-artist {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+/* On narrow screens the up-next card sits above the now-playing card. */
+@media (max-width: 700px) {
+  .upnext {
+    left: max(16px, env(safe-area-inset-left));
+    right: auto;
+    bottom: 96px;
+  }
+}
+
 .hint {
   position: fixed;
   left: 16px;
@@ -326,7 +426,15 @@ body.idle {
 @media (prefers-reduced-motion: reduce) {
   .hud,
   .toast,
+  .upnext,
   button {
     transition: none;
   }
+}
+
+/* No cover art (local files, podcasts): show an empty tile instead of a broken image. */
+.now-playing img:not([src]),
+.upnext img:not([src]) {
+  content-visibility: hidden;
+  visibility: hidden;
 }

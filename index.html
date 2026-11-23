@@ -24,6 +24,7 @@
           <div id="np-title" class="np-title"></div>
           <div id="np-artist" class="np-artist"></div>
           <div id="np-status" class="np-status"></div>
+          <div id="np-time" class="np-time"></div>
         </div>
       </div>
       <nav class="controls" aria-label="Visualizer controls">
@@ -33,6 +34,17 @@
         <button id="btn-logout" type="button" title="Disconnect Spotify">Log out</button>
       </nav>
     </div>
+
+    <aside id="upnext" class="upnext" aria-live="polite" hidden>
+      <img id="upnext-art" alt="" width="48" height="48" />
+      <div class="upnext-text">
+        <div class="upnext-label">Up next</div>
+        <div id="upnext-title" class="upnext-title"></div>
+        <div id="upnext-artist" class="upnext-artist"></div>
+      </div>
+    </aside>
+
+    <div id="progress" class="progress" hidden><div id="progress-fill" class="progress-fill"></div></div>
 
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
