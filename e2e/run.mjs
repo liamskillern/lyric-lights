@@ -663,6 +663,65 @@ try {
     }
     await b3.close();
   }
+
+  // ---- 16. Installable app (Android): manifest, icons, offline page, privacy policy ----
+  {
+    const ctx = await browser.newContext({ viewport: { width: 412, height: 860 } });
+    const page = await ctx.newPage();
+    const errors = watchErrors(page);
+    await page.goto(`${BASE}?demo`);
+    await page.waitForFunction(() => document.getElementById("np-title")?.textContent !== "");
+    const href = await page.$eval('link[rel="manifest"]', (l) => l.href);
+    check(href === `${BASE}manifest.webmanifest`, `pwa: manifest linked (${href})`);
+    const res = await ctx.request.get(href);
+    const m = res.ok() ? await res.json() : {};
+    check(
+      new URL(m.start_url ?? "x", href).href === BASE && new URL(m.scope ?? "x", href).href === BASE && m.display === "fullscreen" && m.name === "Lyric Lights",
+      "pwa: manifest start_url and scope are the app, full screen",
+    );
+    // Each icon must exist at the size it claims (PNG width/height live at bytes 16–23).
+    let iconsOk = (m.icons ?? []).length >= 3 && m.icons.some((i) => i.purpose === "maskable");
+    for (const icon of m.icons ?? []) {
+      const r = await ctx.request.get(new URL(icon.src, href).href);
+      const buf = r.ok() ? await r.body() : Buffer.alloc(0);
+      const [w, h] = buf.length > 24 ? [buf.readUInt32BE(16), buf.readUInt32BE(20)] : [0, 0];
+      if (`${w}x${h}` !== icon.sizes) iconsOk = false;
+    }
+    check(iconsOk, "pwa: every icon exists at its stated size, including a maskable one");
+    const scope = await page.evaluate(() =>
+      Promise.race([navigator.serviceWorker.ready.then((r) => r.scope), new Promise((r) => setTimeout(() => r("timeout"), 5000))]),
+    );
+    check(scope === BASE, `pwa: offline service worker registered (${scope})`);
+    check(errors.length === 0, `pwa: no console or CSP errors ${errors.join(" | ")}`);
+
+    // Offline: a friendly page instead of the browser's error.
+    await page.waitForFunction(() => navigator.serviceWorker.controller !== null, null, { timeout: 5000 }).catch(() => {});
+    await ctx.setOffline(true);
+    await page.reload().catch(() => {});
+    const offline = await page.textContent("body").catch(() => "");
+    check(/needs an internet connection/.test(offline ?? ""), "pwa: offline shows the offline page");
+    await page.screenshot({ path: `${OUT}offline.png` });
+    await ctx.setOffline(false);
+
+    // Privacy policy: its own page, linked from the login screen and settings.
+    const pp = await ctx.newPage();
+    const ppErrors = watchErrors(pp);
+    await pp.goto(`${BASE}privacy.html`);
+    check(await pp.isVisible("text=Privacy policy"), "privacy: policy page loads");
+    check(await pp.isVisible("text=never recorded"), "privacy: covers the microphone");
+    check(ppErrors.length === 0, `privacy: no console or CSP errors ${ppErrors.join(" | ")}`);
+    await ctx.close();
+
+    const ctx2 = await browser.newContext();
+    await ctx2.addInitScript(() => localStorage.setItem("sv.clientId", "0123456789abcdef0123456789abcdef"));
+    const login = await ctx2.newPage();
+    await login.goto(BASE);
+    await login.waitForSelector("text=Connect Spotify");
+    const ppHref = await login.$eval(".card a[href='privacy.html']", (a) => a.href).catch(() => "");
+    check(ppHref === `${BASE}privacy.html`, "privacy: linked from the login screen");
+    check((await login.$eval("#settings a[href='privacy.html']", (a) => a.href).catch(() => "")) === `${BASE}privacy.html`, "privacy: linked from settings");
+    await ctx2.close();
+  }
 } finally {
   await browser.close();
   server.kill();

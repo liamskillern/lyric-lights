@@ -170,7 +170,7 @@ function showSetup(error?: string): void {
     ),
     h("div", { className: "row" }, input, save),
     err,
-    h("p", { className: "fine-print" }, "No Spotify account handy? ", link("?demo", "Watch the demo"), "."),
+    h("p", { className: "fine-print" }, "No Spotify account handy? ", link("?demo", "Watch the demo"), ". ", link("privacy.html", "Privacy policy"), "."),
   );
   input.focus();
 }
@@ -198,7 +198,13 @@ function showLogin(error?: string, justLoggedOut = false): void {
   content.push(
     h("div", { className: "row" }, btn, h("a", { className: "button", href: "?demo" }, "Watch the demo")),
     h("div", { className: "row" }, change),
-    h("p", { className: "fine-print" }, "Your login is kept only in this tab and forgotten when you close it. There's no server: the page talks straight to Spotify and LRCLIB (for lyrics)."),
+    h(
+      "p",
+      { className: "fine-print" },
+      "Your login is kept only in this tab and forgotten when you close it. There's no server: the page talks straight to Spotify and LRCLIB (for lyrics). ",
+      link("privacy.html", "Privacy policy"),
+      ".",
+    ),
   );
   showPanel(...content);
 }
@@ -748,9 +754,20 @@ function showFramed(): void {
   );
 }
 
+/**
+ * The service worker (public/sw.js) only shows an offline page when there's no connection.
+ * Production builds only: the dev server reloads too often for it to be useful.
+ */
+function registerServiceWorker(): void {
+  if (!import.meta.env.PROD || !("serviceWorker" in navigator)) return;
+  const base = import.meta.env.BASE_URL;
+  navigator.serviceWorker.register(`${base}sw.js`, { scope: base }).catch(() => {});
+}
+
 async function start(): Promise<void> {
   // Refuse to run inside another site's frame (clickjacking). See frame.ts.
   if (isFramed()) return showFramed();
+  registerServiceWorker();
 
   auth.removeLegacyTokens();
   requestAnimationFrame(loop);

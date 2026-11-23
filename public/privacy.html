@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self'; img-src 'self'; base-uri 'none'; form-action 'none'" />
+    <meta name="referrer" content="no-referrer" />
+    <meta name="theme-color" content="#0b0a1a" />
+    <title>Privacy policy · Lyric Lights</title>
+    <link rel="stylesheet" href="page.css" />
+  </head>
+  <body>
+    <main>
+      <h1>Privacy policy</h1>
+      <p class="muted">Lyric Lights · effective November 23, 2026</p>
+
+      <p>
+        Lyric Lights is a free visualizer for the music you play on Spotify. It's a personal project by
+        <a href="https://github.com/liamskillern">liamskillern</a>, and its full source code is public on
+        <a href="https://github.com/liamskillern/lyric-lights">GitHub</a>.
+      </p>
+
+      <h2>The short version</h2>
+      <ul>
+        <li>There's no Lyric Lights server and no Lyric Lights account. The app runs on your device and talks straight to Spotify and LRCLIB.</li>
+        <li>No ads, no analytics, no tracking. Nothing is sold or shared for marketing.</li>
+        <li>Sound from your microphone or computer is analyzed live on your device and never recorded, stored or sent anywhere.</li>
+      </ul>
+
+      <h2>What the app reads from Spotify</h2>
+      <p>
+        Only after you log in with Spotify and agree, the app reads what you're playing right now: the song, artist and album
+        names, the cover art, where you are in the song, whether it's playing, and the next song in your queue. It asks Spotify
+        for read-only access (<code>user-read-currently-playing</code> and <code>user-read-playback-state</code>), so it can't
+        change your account, playlists or playback. This information is used only to draw the visuals on your screen.
+      </p>
+
+      <h2>Who else receives data</h2>
+      <table>
+        <tr>
+          <th>Service</th>
+          <th>What it receives</th>
+          <th>Why</th>
+        </tr>
+        <tr>
+          <td>Spotify</td>
+          <td>Your login, and requests for what's playing and your queue</td>
+          <td>To know what you're listening to. <a href="https://www.spotify.com/legal/privacy-policy/">Spotify's privacy policy</a> applies.</td>
+        </tr>
+        <tr>
+          <td>LRCLIB (lrclib.net)</td>
+          <td>The song's title, artist, album and length</td>
+          <td>To find time-synced lyrics. No account or personal information is sent.</td>
+        </tr>
+      </table>
+      <p>These requests go directly from your device to those services. Lyric Lights never sees them on a server, because it doesn't have one.</p>
+
+      <h2>Microphone and computer sound (optional)</h2>
+      <p>
+        If you turn on beat sync, the app listens to the microphone or, on a computer, to the sound you choose to share. The
+        sound is measured live (loudness and beats) to move the visuals in time with the music. It's never recorded, saved
+        or sent anywhere. When you share your screen to get computer sound, the picture is thrown away immediately and only
+        the sound is used. Turning beat sync off, logging out or closing the app stops listening.
+      </p>
+
+      <h2>What's stored on your device</h2>
+      <table>
+        <tr>
+          <th>Item</th>
+          <th>Where</th>
+          <th>How long</th>
+        </tr>
+        <tr>
+          <td>Spotify access token</td>
+          <td>App memory only</td>
+          <td>Until the app is reloaded or closed</td>
+        </tr>
+        <tr>
+          <td>Spotify refresh token</td>
+          <td>Session storage (this window only)</td>
+          <td>Until you log out or close the app</td>
+        </tr>
+        <tr>
+          <td>Your Spotify Client ID and settings</td>
+          <td>Local storage</td>
+          <td>Until you clear the app's data or uninstall it</td>
+        </tr>
+      </table>
+      <p>
+        Logging out deletes your login from the device. To remove the app's access at Spotify too, go to
+        <a href="https://www.spotify.com/account/apps/">spotify.com/account/apps</a>.
+      </p>
+
+      <h2>The Android app</h2>
+      <p>
+        The Android app opens this same website full-screen in Google Chrome. Everything above applies to it. Chrome's own
+        privacy policy covers the browser itself.
+      </p>
+
+      <h2>Children</h2>
+      <p>Lyric Lights isn't directed at children under 13, and it doesn't knowingly collect any information from anyone.</p>
+
+      <h2>Changes</h2>
+      <p>If this policy changes, the new version will be posted on this page with a new date.</p>
+
+      <h2>Contact</h2>
+      <p>
+        Questions or requests: open an issue at
+        <a href="https://github.com/liamskillern/lyric-lights/issues">github.com/liamskillern/lyric-lights/issues</a>.
+      </p>
+
+      <p><a href="./">← Back to Lyric Lights</a></p>
+    </main>
+  </body>
+</html>
