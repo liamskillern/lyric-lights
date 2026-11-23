@@ -1,5 +1,5 @@
 import "./style.css";
-import { AudioInput, canCaptureSystemAudio, NoAudioSharedError, type AudioSource } from "./audio";
+import { AudioInput, canCaptureSystemAudio, NoAudioSharedError, SupersededError, type AudioSource } from "./audio";
 import * as auth from "./auth";
 import { createDemo, type DemoSource } from "./demo";
 import { isFramed } from "./frame";
@@ -625,7 +625,9 @@ async function startBeat(source: AudioSource): Promise<void> {
       4500,
     );
   } catch (err) {
-    if (err instanceof NoAudioSharedError) {
+    if (err instanceof SupersededError) {
+      // A newer click or "Off" took over while the browser was asking; its stream is already stopped.
+    } else if (err instanceof NoAudioSharedError) {
       toast("No sound was shared. Try again and tick \"Also share system audio\" (Chrome or Edge on a computer).", 7000);
     } else if ((err as Error).name === "NotAllowedError") {
       toast(source === "system" ? "Sharing was cancelled." : "Microphone permission was denied.", 4000);
@@ -642,7 +644,8 @@ async function toggleBeat(source: AudioSource = settings.beatSource): Promise<vo
   await startBeat(source);
 }
 
-beatOff.addEventListener("click", () => audio.active && stopBeat());
+// Always stop, even while a mic or share prompt is still open, so "Off" cancels it too.
+beatOff.addEventListener("click", () => stopBeat(!audio.active));
 beatSystem.addEventListener("click", () => audio.source !== "system" && void startBeat("system"));
 beatMic.addEventListener("click", () => audio.source !== "mic" && void startBeat("mic"));
 
@@ -663,10 +666,19 @@ function nudgeLyrics(deltaMs: number): void {
 
 btnMic.addEventListener("click", () => void toggleBeat());
 btnFull.addEventListener("click", () => void toggleFullscreen());
-btnLogout.addEventListener("click", () => {
+/**
+ * Leave the visualizer: stop asking Spotify, turn beat sync off (mic or computer sound) and
+ * let the screen sleep. The login screen hides the Beat controls, so this must happen first.
+ */
+function endSession(): void {
   poller?.stop();
   stopBeat(true);
-  void wakeLock?.release();
+  void wakeLock?.release().catch(() => {});
+  wakeLock = null;
+}
+
+btnLogout.addEventListener("click", () => {
+  endSession();
   auth.logout();
   showLogin(undefined, true);
 });
@@ -774,7 +786,7 @@ async function start(): Promise<void> {
       if (msg) toast(msg, 5000);
     },
     onLoggedOut: () => {
-      poller?.stop();
+      endSession();
       showLogin("Your Spotify session ended. Please connect again.");
     },
   });

@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { BeatDetector } from "../src/audio";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { AudioInput, BeatDetector, SupersededError } from "../src/audio";
 
 describe("BeatDetector", () => {
   it("finds a steady kick drum and ignores the quiet between hits", () => {
@@ -63,5 +63,118 @@ describe("AutoGain", () => {
     for (let i = 0; i < 2000; i++) v = g.push(0.2);
     expect(v).toBeCloseTo(1, 1);
     expect(g.push(0.9)).toBe(1);
+  });
+});
+
+// ---- AudioInput: the mic must really be off when beat sync says it is ----
+
+class FakeTrack {
+  readyState: "live" | "ended" = "live";
+  constructor(public kind: "audio" | "video") {}
+  stop() {
+    this.readyState = "ended";
+  }
+  addEventListener() {}
+}
+class FakeStream {
+  tracks = [new FakeTrack("audio")];
+  getTracks() {
+    return this.tracks;
+  }
+  getAudioTracks() {
+    return this.tracks.filter((t) => t.kind === "audio");
+  }
+  getVideoTracks() {
+    return this.tracks.filter((t) => t.kind === "video");
+  }
+}
+class FakeAudioContext {
+  static open = 0;
+  sampleRate = 48_000;
+  constructor() {
+    FakeAudioContext.open++;
+  }
+  createMediaStreamSource() {
+    return { connect() {} };
+  }
+  createAnalyser() {
+    return { fftSize: 0, smoothingTimeConstant: 0, frequencyBinCount: 1024, getByteFrequencyData() {} };
+  }
+  async close() {
+    FakeAudioContext.open--;
+  }
+}
+
+/** A fake mic whose permission answers arrive only when the test says so. */
+function fakeMic() {
+  const pending: ((s: FakeStream) => void)[] = [];
+  const streams: FakeStream[] = [];
+  vi.stubGlobal("AudioContext", FakeAudioContext);
+  vi.stubGlobal("navigator", {
+    userAgent: "test",
+    mediaDevices: {
+      getUserMedia: () =>
+        new Promise<FakeStream>((resolve) => {
+          const s = new FakeStream();
+          streams.push(s);
+          pending.push(() => resolve(s));
+        }),
+    },
+  });
+  const live = () => streams.flatMap((s) => s.tracks).filter((t) => t.readyState === "live").length;
+  const answerAll = async () => {
+    pending.splice(0).forEach((r) => r(undefined as never));
+    await new Promise((r) => setTimeout(r, 0));
+  };
+  return { streams, live, answerAll };
+}
+
+describe("AudioInput start/stop", () => {
+  beforeEach(() => {
+    FakeAudioContext.open = 0;
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("a normal start and stop leaves nothing running", async () => {
+    const mic = fakeMic();
+    const a = new AudioInput();
+    const started = a.start("mic");
+    await mic.answerAll();
+    await started;
+    expect(a.active).toBe(true);
+    expect(mic.live()).toBe(1);
+    a.stop();
+    expect(mic.live()).toBe(0);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(FakeAudioContext.open).toBe(0);
+  });
+
+  it("two quick starts (a double click) keep one mic, and Off stops it", async () => {
+    const mic = fakeMic();
+    const a = new AudioInput();
+    const first = a.start("mic").catch((e: Error) => e);
+    const second = a.start("mic");
+    await mic.answerAll();
+    expect(await first).toBeInstanceOf(SupersededError);
+    await second;
+    expect(mic.streams.length).toBe(2);
+    expect(mic.live()).toBe(1); // the first one was let go as soon as it arrived
+    expect(FakeAudioContext.open).toBe(1);
+    a.stop();
+    expect(mic.live()).toBe(0);
+  });
+
+  it("Off while the browser is still asking cancels the request", async () => {
+    const mic = fakeMic();
+    const a = new AudioInput();
+    const started = a.start("mic").catch((e: Error) => e);
+    a.stop();
+    await mic.answerAll();
+    expect(await started).toBeInstanceOf(SupersededError);
+    expect(a.active).toBe(false);
+    expect(mic.live()).toBe(0);
+    expect(FakeAudioContext.open).toBe(0);
   });
 });

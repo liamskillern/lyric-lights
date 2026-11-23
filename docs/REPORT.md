@@ -25,7 +25,7 @@ It runs entirely in the browser. There is no server, no account system and no co
 | Area | State |
 |---|---|
 | Features | All built and live (list below) |
-| Automated tests | 160 unit tests + 71 browser checks, all passing; run on every push |
+| Automated tests | 163 unit tests + 77 browser checks, all passing; run on every push |
 | Security review | Done; 10 findings fixed (section 7) |
 | Real Spotify account | **Not tested yet.** Every check so far used simulated Spotify data, because the build machine can't reach Spotify. The first real-world test is still to do (section 2). |
 | Real system-audio beat sync | **Not tested yet** with real music; only with a simulated mic/screen share |
@@ -198,7 +198,7 @@ Spotify permissions requested (both **read-only**): `user-read-currently-playing
 | Spotify access token | Page memory only | Until reload |
 | Spotify refresh token | `sessionStorage` (this tab only) | Until the tab closes or you log out |
 | Client ID, settings | `localStorage` | Until cleared; neither is secret |
-| Audio from mic or computer sound | Nowhere: analyzed live, never recorded or sent | — |
+| Audio from mic or computer sound | Nowhere: analyzed live, never recorded or sent | Until you turn beat sync off, log out, or the login ends |
 
 **Protections in place**
 - **Login:** OAuth Authorization Code with **PKCE** (no client secret in the page) and a `state` check against login CSRF.
@@ -206,13 +206,14 @@ Spotify permissions requested (both **read-only**): `user-read-currently-playing
 - **Clickjacking guard:** the page refuses to run inside another site's frame.
 - **No HTML injection:** song titles, lyrics and error codes are never inserted as HTML. Unknown `?error=` values in a link get a fixed message.
 - **Untrusted data is checked:** LRCLIB and Spotify responses are type-checked and size-capped (1 MB response, 2,000 lines, 300 characters per line). Caches are bounded.
+- **The mic really turns off:** turning beat sync off, logging out, or the Spotify login ending always stops the mic or computer-sound capture, even after a double click or an "Off" pressed while the browser is still asking. (Fixed in the Nov 23 audit; browser checks confirm no audio stream is left running.)
 - **Supply chain:** GitHub Actions are pinned to exact commits, the token isn't left on disk during builds, and Dependabot proposes weekly updates. `npm audit`: 0 known vulnerabilities.
 
 ![Clickjacking guard](img/clickjacking-guard.jpg)
 *Loaded inside another site's frame, the app refuses to start.*
 
 **What's left over (known and accepted)**
-- All GitHub Pages sites under `liamskillern.github.io` share one storage area. The fixes above keep long-lived tokens out of shared storage, but full isolation would need separate hosting (for example Cloudflare Pages, free). Only matters if you publish other sites there.
+- All GitHub Pages sites under `liamskillern.github.io` share one storage area. The fixes above keep long-lived tokens out of shared storage, but full isolation would need separate hosting (for example Cloudflare Pages, free). Today Lyric Lights is the only site there, so **don't turn on GitHub Pages for another repo** (such as `homelab`) without moving this app first.
 - **Logging out doesn't revoke access at Spotify** (Spotify offers no way to). To cut the app off completely, remove it at **spotify.com/account/apps**. The logout screen links there.
 
 ---
@@ -316,8 +317,8 @@ Spotify Web API ──(poll ~1.5 s)──► now playing + position ──► so
 
 ## 14. Testing, deployment, maintenance
 
-- **Unit tests:** 160 (Vitest), covering the LRC parser, PKCE, palette, mood, chorus, tempo, beat clock, camera, settings validation, security cases and more. `npm test`
-- **Browser checks:** 71 (Playwright), against the production build with its security policy, with Spotify and LRCLIB simulated: login and logout, storage, the frame guard, the error link, every style, font and animation, karaoke, idle screen, up next, beat sync with a fake mic, beat pulse timing and tap tempo. `npm run e2e`
+- **Unit tests:** 163 (Vitest), covering the LRC parser, PKCE, palette, mood, chorus, tempo, beat clock, camera, settings validation, security cases and more. `npm test`
+- **Browser checks:** 77 (Playwright), against the production build with its security policy, with Spotify and LRCLIB simulated: login and logout, storage, the frame guard, the error link, every style, font and animation, karaoke, idle screen, up next, beat sync with a fake mic, the mic really stopping (double click, Off mid-prompt, session ending), beat pulse timing and tap tempo. `npm run e2e`
 - **Deploy:** every push to `main` runs the tests, builds and publishes to GitHub Pages automatically.
 - **Updates:** Dependabot opens weekly pull requests. One is open now (TypeScript 7, Vitest 5, major versions); it needs checking before merging.
 

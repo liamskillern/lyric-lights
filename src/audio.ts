@@ -97,10 +97,27 @@ export class NoAudioSharedError extends Error {
   }
 }
 
+/**
+ * A start() that was overtaken (by a newer start() or by stop()) while the browser was still
+ * asking. Its stream has already been stopped; callers can ignore this.
+ */
+export class SupersededError extends Error {
+  constructor() {
+    super("Beat sync request was replaced");
+    this.name = "SupersededError";
+  }
+}
+
 export class AudioInput {
   private ctx: AudioContext | null = null;
   private analyser: AnalyserNode | null = null;
   private stream: MediaStream | null = null;
+  /**
+   * Bumped by every start() and stop(). A start() only keeps its stream if nothing else
+   * happened while the browser was asking; otherwise that stream is stopped at once, so a
+   * double click or an early "Off" can never leave the mic running unseen.
+   */
+  private generation = 0;
   private bins: Uint8Array<ArrayBuffer> = new Uint8Array(0);
   private detector = new BeatDetector();
   private gains = { bass: new AutoGain(), mid: new AutoGain(), treble: new AutoGain() };
@@ -127,6 +144,7 @@ export class AudioInput {
 
   async start(source: AudioSource, sensitivity = 0.5): Promise<void> {
     this.stop();
+    const gen = this.generation;
     // Turn off voice-call processing: it treats music as noise and flattens it.
     const clean = { echoCancellation: false, noiseSuppression: false, autoGainControl: false };
     let stream: MediaStream;
@@ -137,14 +155,22 @@ export class AudioInput {
       // We only want the sound. Stop the picture right away: it is never drawn or stored.
       stream.getVideoTracks().forEach((t) => t.stop());
       if (stream.getAudioTracks().length === 0) {
+        stream.getTracks().forEach((t) => t.stop());
         throw new NoAudioSharedError();
       }
     } else {
       stream = await navigator.mediaDevices.getUserMedia({ audio: clean });
     }
 
+    // Overtaken while the browser was asking (double click, or Off pressed): let this one go.
+    if (gen !== this.generation) {
+      stream.getTracks().forEach((t) => t.stop());
+      throw new SupersededError();
+    }
+
     this.stream = stream;
     stream.getAudioTracks()[0].addEventListener("ended", () => {
+      if (this.stream !== stream) return; // an old share ending must not stop the current one
       this.stop();
       this.onEnded?.();
     });
@@ -168,6 +194,7 @@ export class AudioInput {
   }
 
   stop(): void {
+    this.generation++;
     this.stream?.getTracks().forEach((t) => t.stop());
     void this.ctx?.close().catch(() => {});
     this.ctx = null;

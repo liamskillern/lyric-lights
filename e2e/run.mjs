@@ -564,6 +564,105 @@ try {
     check(errors.length === 0, `beat: no console errors ${errors.join(" | ")}`);
     await b2.close();
   }
+
+  // ---- 15. Privacy: when beat sync says off, the mic really is off ----
+  {
+    const b3 = await chromium.launch({ args: ["--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream"] });
+    // Remember every stream the page gets, so we can check each one was stopped.
+    const recordStreams = () => {
+      window.__streams = [];
+      const md = navigator.mediaDevices;
+      const gum = md.getUserMedia.bind(md);
+      md.getUserMedia = async (c) => {
+        const s = await gum(c);
+        window.__streams.push(s);
+        return s;
+      };
+    };
+    const liveTracks = (page) =>
+      page.evaluate(() => window.__streams.flatMap((s) => s.getTracks()).filter((t) => t.readyState !== "ended").length);
+    const streamCount = (page) => page.evaluate(() => window.__streams.length);
+
+    // (a) Double-click Microphone, then Off.
+    {
+      const ctx = await b3.newContext({ viewport: { width: 1280, height: 800 } });
+      await ctx.addInitScript(recordStreams);
+      const page = await ctx.newPage();
+      const errors = watchErrors(page);
+      await page.goto(`${BASE}?demo`);
+      await page.waitForFunction(() => document.getElementById("np-title")?.textContent !== "");
+      await page.evaluate(() => {
+        const mic = document.getElementById("beat-mic");
+        mic.click();
+        mic.click();
+      });
+      await page.waitForFunction(() => document.getElementById("btn-mic")?.getAttribute("aria-pressed") === "true", null, { timeout: 5000 }).catch(() => {});
+      await page.waitForTimeout(500);
+      const asked = await streamCount(page);
+      await page.click("#btn-settings");
+      await page.click("#beat-off");
+      await page.waitForTimeout(300);
+      check(asked >= 1 && (await liveTracks(page)) === 0, `privacy: double-click Microphone, then Off: mic fully off (${asked} requests, ${await liveTracks(page)} still live)`);
+
+      // (b) Off pressed while the mic request is still pending.
+      await page.evaluate(() => {
+        document.getElementById("beat-mic").click();
+        document.getElementById("beat-off").click();
+      });
+      await page.waitForTimeout(800);
+      check(
+        (await liveTracks(page)) === 0 && (await page.getAttribute("#btn-mic", "aria-pressed")) === "false",
+        `privacy: Off during the mic request cancels it (${await liveTracks(page)} still live)`,
+      );
+      check(errors.length === 0, `privacy: no console errors ${errors.join(" | ")}`);
+      await ctx.close();
+    }
+
+    // (c) The Spotify login ends while beat sync is on.
+    {
+      const ctx = await b3.newContext({ viewport: { width: 1280, height: 800 } });
+      await ctx.addInitScript(recordStreams);
+      await ctx.addInitScript(() => {
+        localStorage.setItem("sv.clientId", "0123456789abcdef0123456789abcdef");
+        sessionStorage.setItem("sv.refresh", "r");
+      });
+      let revoked = false;
+      const cors = { "access-control-allow-origin": "*" };
+      await ctx.route("https://accounts.spotify.com/api/token", (r) =>
+        revoked
+          ? r.fulfill({ status: 400, contentType: "application/json", headers: cors, body: JSON.stringify({ error: "invalid_grant" }) })
+          : r.fulfill({ status: 200, contentType: "application/json", headers: cors, body: JSON.stringify({ access_token: "a", expires_in: 3600 }) }),
+      );
+      await ctx.route("https://lrclib.net/**", (r) => r.fulfill({ status: 200, contentType: "application/json", headers: cors, body: "[]" }));
+      await ctx.route("https://api.spotify.com/**", (route) => {
+        if (route.request().url().includes("/queue")) return route.fulfill({ status: 200, contentType: "application/json", headers: cors, body: "{}" });
+        if (revoked) return route.fulfill({ status: 401, contentType: "application/json", headers: cors, body: "{}" });
+        route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          headers: cors,
+          body: JSON.stringify({ is_playing: true, progress_ms: 1000, currently_playing_type: "track", item: { type: "track", id: "p", name: "Private Song", duration_ms: 200000, artists: [{ name: "Someone" }], album: { name: "A", images: [] } } }),
+        });
+      });
+      const page = await ctx.newPage();
+      const errors = watchErrors(page);
+      await page.goto(BASE);
+      await page.waitForFunction(() => document.getElementById("np-title")?.textContent === "Private Song");
+      await page.keyboard.press("m");
+      await page.waitForFunction(() => document.getElementById("btn-mic")?.getAttribute("aria-pressed") === "true", null, { timeout: 5000 }).catch(() => {});
+      const on = (await liveTracks(page)) > 0;
+      revoked = true;
+      await page.waitForSelector("text=Your Spotify session ended", { timeout: 8000 }).catch(() => {});
+      await page.waitForTimeout(300);
+      check(await page.isVisible("text=Your Spotify session ended"), "privacy: login screen after the session ends");
+      check(on && (await liveTracks(page)) === 0, `privacy: session ends: mic turned off too (${await liveTracks(page)} still live)`);
+      // The mocked 401 and 400 answers are logged by the browser itself; anything else is a bug.
+      const real = errors.filter((e) => !/status of 40[01]/.test(e));
+      check(real.length === 0, `privacy (session end): no console errors ${real.join(" | ")}`);
+      await ctx.close();
+    }
+    await b3.close();
+  }
 } finally {
   await browser.close();
   server.kill();
