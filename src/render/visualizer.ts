@@ -7,6 +7,7 @@ import { EFFECTS, noEffects, type Effect, type SceneColors, type SceneTarget } f
 import type { VisualStyle } from "../settings";
 import { blurArt } from "./background";
 import { FONTS, type FontSpec } from "../fonts";
+import { overscan, SpringCamera } from "./camera";
 import { drawIdle } from "./idle";
 import { calmAnim, type LyricAnim } from "./lyricAnim";
 import { LYRICS_Y, STYLE_DRAW } from "./styles";
@@ -23,6 +24,8 @@ export interface FrameInput {
   level: number;
   /** bass / mid / treble 0..1 (all 0 when beat sync is off) */
   bands?: Bands;
+  /** a snare/clap was heard this frame */
+  snare?: boolean;
   /** position in the song (ms), for word-by-word lyric timing */
   songMs?: number;
   /** heard tempo, for slow swells once per bar */
@@ -47,6 +50,10 @@ export class Visualizer {
   private sceneTime = 0;
   private pulse = 0;
   private wasChorus = false;
+  private camera = new SpringCamera();
+  private lastCamReport = 0;
+  /** kick motion: 0 off, 1 subtle, 1.8 strong (settings) */
+  kickMotion = 1;
   private chorusAmt = 0;
   private bands: Bands = { ...SILENT };
   private flashes = new FlashLimiter(3);
@@ -145,6 +152,16 @@ export class Visualizer {
       // The gentle pulse follows every beat; rings (a visible flash) max 3 per second.
       const ring = this.allowFlashes && this.flashes.allow(now);
       this.effects.beat(0.6 + input.level * 0.6, ring);
+      this.camera.kick(0.5 + input.level * 0.5, 1 + this.chorusAmt * 0.5);
+    }
+    if (input.snare) this.camera.snare(0.5 + this.bands.mid * 0.5, 1 + this.chorusAmt * 0.5);
+    // Reduced motion: no camera moves at all.
+    this.camera.strength = this.allowFlashes ? this.kickMotion : 0;
+    this.camera.update(dt);
+    // Read-only status for tests/debugging: how far the camera is punched in right now.
+    if (now - this.lastCamReport > 100) {
+      this.lastCamReport = now;
+      this.canvas.dataset.camera = this.camera.pos.zoom.toFixed(3);
     }
     this.pulse *= Math.exp(-dt * 6);
 
@@ -164,6 +181,23 @@ export class Visualizer {
 
     const ctx = this.ctx;
     const style: VisualStyle = this.idle ? "aurora" : this.style;
+
+    // The camera moves the background and effects; the lyrics (drawn after) stay put.
+    const cam = this.camera.pos;
+    const m = Math.min(this.w, this.h);
+    // A slow drift keeps things alive between hits (none with motion off or while idle).
+    const drift = this.camera.strength > 0 && !this.idle ? 0.006 : 0;
+    const tx = (cam.x + Math.sin(this.sceneTime * 0.6) * drift) * m;
+    const ty = (cam.y + Math.cos(this.sceneTime * 0.45) * drift) * m;
+    const zoom = (1 + cam.zoom) * overscan({ ...cam, x: tx / m, y: ty / m }, this.w, this.h);
+    ctx.save();
+    ctx.fillStyle = "#000";
+    ctx.fillRect(0, 0, this.w, this.h);
+    ctx.translate(this.w / 2 + tx, this.h / 2 + ty);
+    ctx.rotate(cam.rot);
+    ctx.scale(zoom, zoom);
+    ctx.translate(-this.w / 2, -this.h / 2);
+
     STYLE_DRAW[style](ctx, this.w, this.h, {
       colors: s.colors,
       brightness: s.brightness,
@@ -178,6 +212,7 @@ export class Visualizer {
       speed: s.speed,
     });
     this.effects.draw(ctx, s.effects, s.colors, now / 1000, s.brightness * (1 + this.bands.mid * 0.25), this.bands.treble);
+    ctx.restore();
 
     drawIdle(ctx, this.w, this.h, now, s.colors.text, s.colors.accent, this.idleAmt, this.idleHint, this.font);
 

@@ -477,6 +477,26 @@ try {
     await page.waitForTimeout(1500);
     await page.keyboard.press("m");
     check((await page.getAttribute("#btn-mic", "aria-pressed")) === "false", "beat: turns off again");
+    // Kick motion: the fake mic beeps, which count as beats, so the camera should punch in.
+    await page.keyboard.press("m");
+    let maxZoom = 0;
+    for (let i = 0; i < 40; i++) {
+      maxZoom = Math.max(maxZoom, Number(await page.getAttribute("#stage", "data-camera")));
+      await page.waitForTimeout(100);
+    }
+    check(maxZoom > 0.004, `kick motion: background moves on beats (max zoom ${maxZoom})`);
+    // Reduced motion: no camera moves.
+    await page.evaluate(() => localStorage.setItem("sv.settings", JSON.stringify({ reducedMotion: true })));
+    await page.reload();
+    await page.waitForTimeout(500);
+    await page.keyboard.press("m");
+    let calmMax = 0;
+    for (let i = 0; i < 30; i++) {
+      calmMax = Math.max(calmMax, Math.abs(Number(await page.getAttribute("#stage", "data-camera"))));
+      await page.waitForTimeout(100);
+    }
+    check(calmMax === 0, `kick motion: none with reduced motion (max ${calmMax})`);
+    await page.keyboard.press("m");
     // System audio (B): headless Chromium shares a screen with no sound, so expect the friendly message.
     await page.keyboard.press("b");
     await page.waitForTimeout(2000);

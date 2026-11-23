@@ -47,6 +47,7 @@ const setUpNext = $<HTMLInputElement>("set-upnext");
 const setGuessedPulse = $<HTMLInputElement>("set-guessed-pulse");
 const setFont = $<HTMLSelectElement>("set-font");
 const setAnim = $<HTMLSelectElement>("set-anim");
+const setKick = $<HTMLSelectElement>("set-kick");
 const setKaraoke = $<HTMLInputElement>("set-karaoke");
 const btnMic = $<HTMLButtonElement>("btn-mic");
 const btnFull = $<HTMLButtonElement>("btn-full");
@@ -392,6 +393,7 @@ function loop(now: number): void {
     lineIndex: idx,
     songMs: pos + LEAD_MS + settings.lyricOffsetMs,
     beat,
+    snare: audio.snare,
     level,
     bands: audio.bands,
     tempo: tempo && audio.active ? { bpm: tempo.bpm, lastBeatAt: audio.lastBeatAt } : null,
@@ -407,6 +409,7 @@ function applySettings(save = true): void {
   viz.style = settings.style;
   viz.lyricAnim = settings.lyricAnim;
   viz.karaoke = settings.karaoke;
+  viz.kickMotion = { off: 0, subtle: 1, strong: 1.8 }[settings.kickMotion];
   refreshFont();
   viz.lyricScale = LYRIC_SIZES[settings.lyricSize];
   viz.allowFlashes = !settings.reducedMotion;
@@ -432,6 +435,7 @@ function syncSettingsForm(): void {
   setGuessedPulse.checked = settings.guessedPulse;
   setFont.value = settings.font;
   setAnim.value = settings.lyricAnim;
+  setKick.value = settings.kickMotion;
   setKaraoke.checked = settings.karaoke;
   refreshBeatUi();
 }
@@ -449,6 +453,7 @@ setOffset.addEventListener("input", () => update({ lyricOffsetMs: Number(setOffs
 setOffsetReset.addEventListener("click", () => update({ lyricOffsetMs: 0 }));
 setSensitivity.addEventListener("input", () => update({ beatSensitivity: Number(setSensitivity.value) / 100 }));
 setUpNext.addEventListener("change", () => update({ showUpNext: setUpNext.checked }));
+setKick.addEventListener("change", () => update({ kickMotion: setKick.value as Settings["kickMotion"] }));
 setAnim.addEventListener("change", () => update({ lyricAnim: setAnim.value as LyricAnim }));
 setKaraoke.addEventListener("change", () => update({ karaoke: setKaraoke.checked }));
 setFont.addEventListener("change", () => update({ font: setFont.value as FontChoice }));

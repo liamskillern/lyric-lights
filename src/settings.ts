@@ -39,6 +39,8 @@ export interface Settings {
   showUpNext: boolean;
   /** pulse on the tempo guessed from lyrics when beat sync is off */
   guessedPulse: boolean;
+  /** how much the background moves with kicks and snares */
+  kickMotion: "off" | "subtle" | "strong";
   /** calmer: slower, fewer particles, no flashes */
   reducedMotion: boolean;
 }
@@ -60,6 +62,7 @@ export function defaultSettings(prefersReducedMotion = false, canShareSystemAudi
     beatSensitivity: 0.5,
     showUpNext: true,
     guessedPulse: false,
+    kickMotion: "subtle",
     reducedMotion: prefersReducedMotion,
   };
 }
@@ -86,6 +89,7 @@ export function parseSettings(raw: unknown, defaults: Settings): Settings {
     beatSensitivity: num(r.beatSensitivity, 0, 1, defaults.beatSensitivity),
     showUpNext: bool(r.showUpNext, defaults.showUpNext),
     guessedPulse: bool(r.guessedPulse, defaults.guessedPulse),
+    kickMotion: oneOf(r.kickMotion, ["off", "subtle", "strong"] as const, defaults.kickMotion),
     reducedMotion: bool(r.reducedMotion, defaults.reducedMotion),
   };
 }

@@ -7,6 +7,11 @@ A live visualizer for whatever you're playing on Spotify. Play a song on any dev
 - **Lyric mood → tone.** Each line gets a sentiment score (AFINN word list). Happy songs are warmer and brighter, sad ones cooler and darker.
 - **Lyric speed → motion.** Words per minute, measured from the lyric timestamps, sets how fast everything moves. Fast rap moves; ballads drift.
 - **Beat → pulse (optional).** Spotify's audio is DRM-protected, so the page can't read it directly. In Chrome or Edge on a computer it can listen to the **computer's sound** through the screen-share prompt ("Also share system audio"; the picture is thrown away). On phones it uses the mic. Bass, mids and treble drive the glow, brightness and sparkle; flashes are capped at 3 per second (WCAG 2.3.1).
+- **Tempo → speed.** BPM is heard from the beat (median of beat gaps) or guessed from lyric timing (how line starts fit a bar grid). Faster songs move faster; "~" marks a guess.
+- **Kick motion.** The background rides the drums: kicks punch in and push it around in turn (down, left, up, right), snares shake it sideways, all on springs with a small bounce, capped at ~4% of the screen. The lyrics stay still.
+- **Fonts** (`T`): Modern, Poster, Elegant, Marker, Retro, Mono, or Auto (picked per song). Self-hosted, so no font service is contacted.
+- **Lyric animations** (`A`): Rise, Fade, Pop, Slide, Typewriter, Karaoke words.
+- **Karaoke mode** (`K`): three lines, words fill as they're sung (real word timings when the lyrics have them), countdown dots before you come in.
 - **Chorus moments.** Repeated lyric lines are detected as the chorus. Choruses get brighter, faster and bigger, with a sparkle burst when they start.
 - **Four styles** (`V`): Glow, Aurora, Vinyl (the cover as a spinning record) and Tunnel.
 - **Up next + progress.** A progress line, the time, and an "Up next" card from your Spotify queue near the end of each song.
@@ -43,6 +48,10 @@ There is no backend. The page logs in with **Authorization Code + PKCE**, so it 
 | `src/mood.ts` | Line sentiment, theme keywords, words per minute |
 | `src/scene.ts` | Maps everything to colors, speed, brightness and effect levels |
 | `src/audio.ts` | Beat detection and bass/mid/treble from computer sound or the mic, flash limiter |
+| `src/tempo.ts` | Tempo from beats or from lyric timing |
+| `src/fonts.ts` | Self-hosted fonts and the Auto font pick |
+| `src/render/camera.ts` | Spring "camera" that moves with kicks and snares |
+| `src/render/lyricAnim.ts`, `karaoke.ts` | Lyric animations, word fill, countdowns |
 | `src/settings.ts` | Settings with validation (stored values are untrusted) |
 | `src/render/styles/` | The four visual styles |
 | `src/render/` | Particle effects, lyric typography, idle screen |
@@ -73,7 +82,7 @@ npm run dev
 
 Open http://127.0.0.1:5173/ and paste your Client ID when asked, or put it in `.env` as `VITE_SPOTIFY_CLIENT_ID` (see `.env.example`). The Client ID isn't a secret.
 
-**Keys:** `B` beat sync · `M` beat from the mic · `V` next style · `S` settings · `L` lyrics on/off · `F` full screen · `[` / `]` nudge lyric timing (useful with Bluetooth delay) · `0` reset timing.
+**Keys:** `B` beat sync · `M` beat from the mic · `V` next style · `T` next font · `A` next lyric animation · `K` karaoke mode · `S` settings · `L` lyrics on/off · `F` full screen · `[` / `]` nudge lyric timing (useful with Bluetooth delay) · `0` reset timing.
 
 ## Tests
 

@@ -105,6 +105,9 @@ export class AudioInput {
   private detector = new BeatDetector();
   private gains = { bass: new AutoGain(), mid: new AutoGain(), treble: new AutoGain() };
   private tempo = new TempoTracker();
+  /** snares and claps: a sharp jump in the 1.5–5 kHz "snap" range */
+  private snareDetector = new BeatDetector(1.45, 180);
+  snare = false;
   /** performance.now() of the last beat heard */
   lastBeatAt = 0;
 
@@ -158,6 +161,7 @@ export class AudioInput {
     this.gains = { bass: new AutoGain(), mid: new AutoGain(), treble: new AutoGain() };
     this.source = source;
     this.tempo.reset();
+    this.snareDetector = new BeatDetector(1.45, 180);
   }
 
   /** Tempo heard from the audio, once it has enough beats (about 4 s). */
@@ -174,6 +178,7 @@ export class AudioInput {
     this.source = null;
     this.level = 0;
     this.beat = false;
+    this.snare = false;
     this.bands = { ...SILENT };
   }
 
@@ -181,6 +186,7 @@ export class AudioInput {
   update(nowMs: number): void {
     if (!this.analyser || !this.ctx) {
       this.beat = false;
+      this.snare = false;
       return;
     }
     this.analyser.getByteFrequencyData(this.bins);
@@ -189,6 +195,8 @@ export class AudioInput {
     const { level, beat } = this.detector.push(bass, nowMs);
     this.level = level;
     this.beat = beat;
+    // A snare rarely lands exactly with a kick; if both fire, the kick wins.
+    this.snare = !beat && this.snareDetector.push(bandEnergy(this.bins, hz, 1500, 5000), nowMs).beat;
     if (beat) {
       this.tempo.push(nowMs);
       this.lastBeatAt = nowMs;
