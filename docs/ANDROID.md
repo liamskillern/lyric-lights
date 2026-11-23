@@ -162,6 +162,11 @@ Website changes need nothing here. To change the shell (icon, name, colors, vers
 
 Regenerate the whole project from `twa-manifest.json` with `npx @bubblewrap/cli update` (it downloads the icons from the live site).
 
+**Security settings that a regenerate undoes.** Bubblewrap rewrites `android/` from its templates, so after `bubblewrap update` put these back (`npm test` fails until you do):
+- `android:allowBackup="false"` in `AndroidManifest.xml`, so Android's backup doesn't copy the app's data off the phone.
+- The link check in `LauncherActivity.java` (`isLyricLightsUrl`). Any app on the phone can start Lyric Lights with a link of its choosing; this only lets `https://liamskillern.github.io/lyric-lights/…` through and opens the home page for anything else.
+- `mavenCentral()` instead of `jcenter()` in `android/build.gradle`. JCenter is shut down and only kept as a read-only mirror, and every extra repository is one more place a fake package could come from.
+
 ## Troubleshooting
 
 | Problem | Fix |

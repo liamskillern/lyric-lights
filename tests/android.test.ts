@@ -55,6 +55,33 @@ describe("Android app settings", () => {
     expect(strings).toContain('\\"site\\": \\"https://liamskillern.github.io\\"');
     expect(twa.additionalTrustedOrigins).toEqual([]);
   });
+
+  // These settings come from the security review. `npx @bubblewrap/cli update` regenerates
+  // android/ from templates and would silently undo them, so these checks make that loud.
+  describe("security hardening survives a Bubblewrap regenerate", () => {
+    const manifest = read("android/app/src/main/AndroidManifest.xml");
+    const launcher = read("android/app/src/main/java/io/github/liamskillern/lyriclights/LauncherActivity.java");
+
+    it("keeps app data out of Android backups", () => {
+      expect(manifest).toContain('android:allowBackup="false"');
+    });
+
+    it("only opens Lyric Lights pages, even when another app picks the link", () => {
+      expect(launcher).toContain("isLyricLightsUrl(uri)");
+      expect(launcher).toContain('APP_HOST = "liamskillern.github.io"');
+      expect(launcher).toContain(`APP_PATH = "${twa.startUrl}"`);
+    });
+
+    it("only exports the activities and services it has to", () => {
+      expect(manifest).toMatch(/ManageDataLauncherActivity"\s+android:exported="false"/);
+      expect(manifest).toMatch(/FileProvider"[\s\S]*?android:exported="false"/);
+      expect(twa.enableNotifications).toBe(false); // keeps DelegationService unexported
+    });
+
+    it("downloads build dependencies only from Google and Maven Central (no JCenter)", () => {
+      expect(read("android/build.gradle")).not.toMatch(/jcenter\(\)/);
+    });
+  });
 });
 
 describe("Android live wallpaper", () => {
