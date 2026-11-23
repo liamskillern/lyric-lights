@@ -1,4 +1,5 @@
-# Weekly pull requests to update the pinned GitHub Actions and the npm packages.
+# Weekly pull requests to update the pinned GitHub Actions, the npm packages and the Android shell's
+# Gradle dependencies (androidbrowserhelper and the Android build tools).
 version: 2
 updates:
   - package-ecosystem: github-actions
@@ -16,3 +17,8 @@ updates:
       dev-tools:
         dependency-type: development
     open-pull-requests-limit: 5
+  - package-ecosystem: gradle
+    directory: /android
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 3
