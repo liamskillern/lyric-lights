@@ -4,7 +4,7 @@
 import { css, type RGB } from "../color";
 import type { LyricLine } from "../lyrics";
 
-const FONT = `"Inter", "Segoe UI", system-ui, -apple-system, Roboto, sans-serif`;
+import { FONTS, fontCss, type FontSpec } from "../fonts";
 const ENTER_MS = 420;
 
 /** Greedy word wrap. `measure` returns a string's width. (Pure, tested.) */
@@ -38,6 +38,8 @@ export interface LyricFrame {
   pulse: number;
   /** vertical center of the lyrics, fraction of height (default 0.5) */
   centerY?: number;
+  /** which font to draw with (default Modern) */
+  font?: FontSpec;
   /** user setting: lyric size multiplier */
   size?: number;
   /** 0..1, eases in during the chorus: bigger text */
@@ -49,9 +51,17 @@ export class LyricsLayer {
   private wrapCache = new Map<string, string[]>();
   private cacheKey = "";
 
+  private font: FontSpec = FONTS.modern;
+
+  /** Forget measured line breaks (call when a font finishes loading: its widths differ). */
+  clearCache(): void {
+    this.wrapCache.clear();
+  }
+
   draw(ctx: CanvasRenderingContext2D, w: number, h: number, f: LyricFrame): void {
-    const base = Math.round(Math.min(Math.max(Math.min(w, h) * 0.068, 22), 76) * (f.size ?? 1));
-    const key = `${w}x${h}`;
+    this.font = f.font ?? FONTS.modern;
+    const base = Math.round(Math.min(Math.max(Math.min(w, h) * 0.068, 22), 76) * (f.size ?? 1) * this.font.scale);
+    const key = `${w}x${h}|${this.font.family}`;
     if (key !== this.cacheKey) {
       this.wrapCache.clear();
       this.cacheKey = key;
@@ -66,8 +76,8 @@ export class LyricsLayer {
       const a = Math.min(ease(age / 800), 1 - ease((age - 4500) / 900));
       if (a > 0.01) {
         const ty = h * (f.centerY ?? 0.5);
-        this.text(ctx, f.title.name, w / 2, ty - base * 0.35, base * 0.95, 800, css(f.color, a), f.glow, a, w * 0.86);
-        this.text(ctx, f.title.artist, w / 2, ty + base * 0.75, base * 0.5, 500, css(f.color, a * 0.7), f.glow, 0, w * 0.86);
+        this.text(ctx, f.title.name, w / 2, ty - base * 0.35, base * 0.95, this.font.bold, css(f.color, a), f.glow, a, w * 0.86);
+        this.text(ctx, f.title.artist, w / 2, ty + base * 0.75, base * 0.5, this.font.light, css(f.color, a * 0.7), f.glow, 0, w * 0.86);
       }
     }
 
@@ -100,7 +110,7 @@ export class LyricsLayer {
     const k = `${size}|${text}`;
     let lines = this.wrapCache.get(k);
     if (!lines) {
-      ctx.font = `800 ${size}px ${FONT}`;
+      ctx.font = fontCss(this.font, this.font.bold, size);
       lines = wrapText(text, w * 0.84, (s) => ctx.measureText(s).width);
       if (this.wrapCache.size > 400) this.wrapCache.clear(); // stay small over long sessions
       this.wrapCache.set(k, lines);
@@ -125,11 +135,11 @@ export class LyricsLayer {
     const rows = this.wrap(ctx, text, w, s);
     const lh = s * 1.15;
     const top = cy - ((rows.length - 1) * lh) / 2;
-    rows.forEach((row, i) => this.text(ctx, row, w / 2, top + i * lh, s, weightK < 1 ? 600 : 800, color, glow, glowAmt, w * 0.9));
+    rows.forEach((row, i) => this.text(ctx, row, w / 2, top + i * lh, s, weightK < 1 ? this.font.light : this.font.bold, color, glow, glowAmt, w * 0.9));
   }
 
   private text(ctx: CanvasRenderingContext2D, s: string, x: number, y: number, size: number, weight: number, color: string, glow: RGB, glowAmt: number, maxW: number): void {
-    ctx.font = `${weight} ${Math.round(size)}px ${FONT}`;
+    ctx.font = fontCss(this.font, weight, size);
     ctx.shadowColor = glowAmt > 0 ? css(glow, 0.55 * glowAmt) : "rgb(0 0 0 / 0.45)";
     ctx.shadowBlur = glowAmt > 0 ? size * 0.5 : size * 0.3;
     ctx.fillStyle = color;

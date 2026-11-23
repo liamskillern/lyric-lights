@@ -2,6 +2,7 @@
 // Stored values are treated as untrusted: anything missing, the wrong type or out of
 // range falls back to the default, so a broken or tampered value can't break the app.
 
+import { FONT_CHOICES, type FontChoice } from "./fonts";
 import { local } from "./storage";
 
 export const STYLES = ["glow", "aurora", "vinyl", "tunnel"] as const;
@@ -21,6 +22,8 @@ export interface Settings {
   /** 0 (no effects) .. 1.5 */
   effectStrength: number;
   showLyrics: boolean;
+  /** lyric font, or "auto" to pick per song */
+  font: FontChoice;
   lyricSize: LyricSize;
   /** shift lyrics earlier (+) or later (−), -3000..3000 ms */
   lyricOffsetMs: number;
@@ -43,6 +46,7 @@ export function defaultSettings(prefersReducedMotion = false, canShareSystemAudi
     style: "glow",
     effectStrength: 1,
     showLyrics: true,
+    font: "modern",
     lyricSize: "m",
     lyricOffsetMs: 0,
     beatSource: canShareSystemAudio ? "system" : "mic",
@@ -66,6 +70,7 @@ export function parseSettings(raw: unknown, defaults: Settings): Settings {
     style: oneOf(r.style, STYLES, defaults.style),
     effectStrength: num(r.effectStrength, 0, 1.5, defaults.effectStrength),
     showLyrics: bool(r.showLyrics, defaults.showLyrics),
+    font: oneOf(r.font, FONT_CHOICES, defaults.font),
     lyricSize: oneOf(r.lyricSize, Object.keys(LYRIC_SIZES) as LyricSize[], defaults.lyricSize),
     lyricOffsetMs: Math.round(num(r.lyricOffsetMs, -3000, 3000, defaults.lyricOffsetMs)),
     beatSource: oneOf(r.beatSource, ["system", "mic"] as const, defaults.beatSource),

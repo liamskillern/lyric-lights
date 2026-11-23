@@ -10,6 +10,7 @@ import { computeScene, type SceneTarget } from "./scene";
 import { formatTime, NOTHING_PLAYING, positionAt, SpotifyPoller, type Playback, type Track } from "./spotify";
 import { LYRIC_SIZES, STYLE_NAMES, STYLES, defaultSettings, loadSettings, parseSettings, saveSettings, type Settings } from "./settings";
 import { shouldIdle } from "./render/idle";
+import { FONT_CHOICES, FONTS, loadFont, resolveFont, type FontChoice } from "./fonts";
 import { estimateTempoFromLyrics, GUESS_CONFIDENCE, gridBeat, type TempoGuess } from "./tempo";
 import { Visualizer } from "./render/visualizer";
 
@@ -43,6 +44,7 @@ const setSensitivity = $<HTMLInputElement>("set-sensitivity");
 const outSensitivity = $<HTMLOutputElement>("out-sensitivity");
 const setUpNext = $<HTMLInputElement>("set-upnext");
 const setGuessedPulse = $<HTMLInputElement>("set-guessed-pulse");
+const setFont = $<HTMLSelectElement>("set-font");
 const btnMic = $<HTMLButtonElement>("btn-mic");
 const btnFull = $<HTMLButtonElement>("btn-full");
 const btnLogout = $<HTMLButtonElement>("btn-logout");
@@ -324,6 +326,7 @@ async function onTrackChange(track: Track | null): Promise<void> {
       npStatus.textContent = "No lyrics found: colors only";
       break;
   }
+  refreshFont();
 }
 
 // ---------- frame loop ----------
@@ -397,6 +400,7 @@ function loop(now: number): void {
 function applySettings(save = true): void {
   viz.showLyrics = settings.showLyrics;
   viz.style = settings.style;
+  refreshFont();
   viz.lyricScale = LYRIC_SIZES[settings.lyricSize];
   viz.allowFlashes = !settings.reducedMotion;
   audio.setSensitivity(settings.beatSensitivity);
@@ -419,6 +423,7 @@ function syncSettingsForm(): void {
   outSensitivity.textContent = `${Math.round(settings.beatSensitivity * 100)}%`;
   setUpNext.checked = settings.showUpNext;
   setGuessedPulse.checked = settings.guessedPulse;
+  setFont.value = settings.font;
   refreshBeatUi();
 }
 
@@ -435,12 +440,29 @@ setOffset.addEventListener("input", () => update({ lyricOffsetMs: Number(setOffs
 setOffsetReset.addEventListener("click", () => update({ lyricOffsetMs: 0 }));
 setSensitivity.addEventListener("input", () => update({ beatSensitivity: Number(setSensitivity.value) / 100 }));
 setUpNext.addEventListener("change", () => update({ showUpNext: setUpNext.checked }));
+setFont.addEventListener("change", () => update({ font: setFont.value as FontChoice }));
 setGuessedPulse.addEventListener("change", () => update({ guessedPulse: setGuessedPulse.checked }));
 setStyle.addEventListener("change", () => update({ style: setStyle.value as Settings["style"] }));
 
 // Fill the style picker and show it.
 for (const style of STYLES) setStyle.append(h("option", { value: style }, STYLE_NAMES[style]));
 $("style-field").hidden = false;
+
+for (const f of FONT_CHOICES) setFont.append(h("option", { value: f }, f === "auto" ? "Auto (fits each song)" : FONTS[f].label));
+
+/** Use the chosen font, or for Auto the one that fits this song. */
+function refreshFont(): void {
+  const key = resolveFont(settings.font, state.song, currentTempo()?.bpm ?? null);
+  loadFont(key);
+  viz.font = FONTS[key];
+}
+
+function cycleFont(): void {
+  const next = FONT_CHOICES[(FONT_CHOICES.indexOf(settings.font) + 1) % FONT_CHOICES.length];
+  update({ font: next });
+  const key = resolveFont(next, state.song, currentTempo()?.bpm ?? null);
+  toast(next === "auto" ? `Font: Auto (${FONTS[key].label} for this song)` : `Font: ${FONTS[next].label}`, 1800);
+}
 
 function cycleStyle(): void {
   const next = STYLES[(STYLES.indexOf(settings.style) + 1) % STYLES.length];
@@ -544,6 +566,7 @@ window.addEventListener("keydown", (e) => {
   if (k === "l") toggleLyrics();
   else if (k === "s") openSettings();
   else if (k === "v") cycleStyle();
+  else if (k === "t") cycleFont();
   else if (k === "b") void toggleBeat();
   else if (k === "m") void toggleBeat("mic");
   else if (k === "f") void toggleFullscreen();

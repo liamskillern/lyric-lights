@@ -301,6 +301,36 @@ try {
     await ctx.close();
   }
 
+  // ---- 12. Lyric fonts (T) ----
+  {
+    const page = await browser.newPage({ viewport: { width: 1280, height: 800 }, deviceScaleFactor: 1 });
+    const errors = watchErrors(page);
+    const fontRequests = [];
+    page.on("request", (r) => /\.woff2?($|\?)/.test(r.url()) && fontRequests.push(r.url()));
+    await page.goto(`${BASE}?demo`);
+    await page.waitForTimeout(12500); // chorus line on screen
+    for (const name of ["auto", "modern", "poster", "elegant", "marker", "retro", "mono"]) {
+      // Settings start at Modern; T steps through the list (Modern → Poster → … → Auto → Modern).
+      if (name !== "auto") {
+        const cur = await page.evaluate(() => JSON.parse(localStorage.getItem("sv.settings") ?? "{}").font ?? "modern");
+        if (cur !== name) {
+          for (let i = 0; i < 7; i++) {
+            await page.keyboard.press("t");
+            const f = await page.evaluate(() => JSON.parse(localStorage.getItem("sv.settings") ?? "{}").font);
+            if (f === name) break;
+          }
+        }
+        await page.waitForTimeout(900);
+        await page.screenshot({ path: `${OUT}font-${name}.png` });
+      }
+    }
+    const saved = await page.evaluate(() => JSON.parse(localStorage.getItem("sv.settings") ?? "{}").font);
+    check(saved === "mono", `fonts: T cycles and saves (${saved})`);
+    check(fontRequests.length > 0 && fontRequests.every((u) => u.startsWith(BASE)), `fonts: all ${fontRequests.length} font files load from this site`);
+    check(errors.length === 0, `fonts: no console or CSP errors ${errors.join(" | ")}`);
+    await page.close();
+  }
+
   // ---- 10. Visual styles (V) ----
   {
     const page = await browser.newPage({ viewport: { width: 1280, height: 800 }, deviceScaleFactor: 1 });

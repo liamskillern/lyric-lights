@@ -6,6 +6,7 @@ import type { LyricLine } from "../lyrics";
 import { EFFECTS, noEffects, type Effect, type SceneColors, type SceneTarget } from "../scene";
 import type { VisualStyle } from "../settings";
 import { blurArt } from "./background";
+import { FONTS, type FontSpec } from "../fonts";
 import { drawIdle } from "./idle";
 import { LYRICS_Y, STYLE_DRAW } from "./styles";
 import { Effects } from "./effects";
@@ -62,11 +63,15 @@ export class Visualizer {
   idleHint = "Play something on Spotify";
   private idleAmt = 0;
   private image: CanvasImageSource | null = null;
+  /** lyric font (settings, or picked per song by Auto) */
+  font: FontSpec = FONTS.modern;
   /** lyric size multiplier (settings) */
   lyricScale = 1;
 
   constructor(private canvas: HTMLCanvasElement) {
     this.ctx = canvas.getContext("2d", { alpha: false })!;
+    // Line breaks measured with a stand-in font are wrong once the real font arrives.
+    document.fonts?.addEventListener("loadingdone", () => this.lyricsLayer.clearCache());
     const ro = new ResizeObserver(() => this.resize());
     ro.observe(canvas);
     this.resize();
@@ -167,7 +172,7 @@ export class Visualizer {
     });
     this.effects.draw(ctx, s.effects, s.colors, now / 1000, s.brightness * (1 + this.bands.mid * 0.25), this.bands.treble);
 
-    drawIdle(ctx, this.w, this.h, now, s.colors.text, s.colors.accent, this.idleAmt, this.idleHint);
+    drawIdle(ctx, this.w, this.h, now, s.colors.text, s.colors.accent, this.idleAmt, this.idleHint, this.font);
 
     if (this.showLyrics && !this.idle) {
       this.lyricsLayer.draw(ctx, this.w, this.h, {
@@ -181,6 +186,7 @@ export class Visualizer {
         chorus: this.chorusAmt,
         size: this.lyricScale * (style === "vinyl" ? 0.8 : 1),
         centerY: LYRICS_Y[style],
+        font: this.font,
         title: this.title,
       });
     }

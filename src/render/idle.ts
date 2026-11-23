@@ -2,6 +2,7 @@
 // The clock drifts slowly so it never sits in one spot (no burn-in on TVs and OLED phones).
 
 import { css, type RGB } from "../color";
+import { FONTS, fontCss, type FontSpec } from "../fonts";
 
 /** After a pause, wait this long before going idle. */
 export const PAUSE_IDLE_MS = 30_000;
@@ -25,24 +26,24 @@ export function clockPosition(w: number, h: number, now: number): { x: number; y
   };
 }
 
-export function drawIdle(ctx: CanvasRenderingContext2D, w: number, h: number, now: number, color: RGB, glow: RGB, alpha: number, hint: string): void {
+export function drawIdle(ctx: CanvasRenderingContext2D, w: number, h: number, now: number, color: RGB, glow: RGB, alpha: number, hint: string, font: FontSpec = FONTS.modern): void {
   if (alpha <= 0.01) return;
   const { x, y } = clockPosition(w, h, now);
   const time = new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
   const size = Math.round(Math.min(Math.max(Math.min(w, h) * 0.18, 56), 180));
-  const font = `"Inter", "Segoe UI", system-ui, -apple-system, Roboto, sans-serif`;
 
   ctx.save();
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  ctx.font = `200 ${size}px ${font}`;
+  // Modern uses Inter's thin weight for the clock; other fonts use their normal weight.
+  ctx.font = fontCss(font, font === FONTS.modern ? 200 : font.light, size * font.scale);
   ctx.shadowColor = css(glow, 0.5 * alpha);
   ctx.shadowBlur = size * 0.35;
   ctx.fillStyle = css(color, 0.92 * alpha);
   ctx.fillText(time, x, y);
   ctx.shadowBlur = 0;
   ctx.shadowColor = "transparent";
-  ctx.font = `500 ${Math.round(size * 0.14)}px ${font}`;
+  ctx.font = fontCss(FONTS.modern, 500, size * 0.14);
   ctx.fillStyle = css(color, 0.55 * alpha);
   ctx.fillText(hint, x, y + size * 0.72, w * 0.9);
   ctx.restore();
