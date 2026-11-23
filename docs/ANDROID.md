@@ -14,7 +14,8 @@ The Android app is a **Trusted Web Activity**: a thin Android shell that opens t
 | Privacy policy | <https://liamskillern.github.io/lyric-lights/privacy.html> |
 | Site ownership file | `https://liamskillern.github.io/.well-known/assetlinks.json` (repo `liamskillern.github.io`) |
 | Package name (permanent) | `io.github.liamskillern.lyriclights` |
-| Version | 1.0.0 (versionCode 1), targets Android 16 (API 36), runs on Android 7+ |
+| Version | 1.1.0 (versionCode 2), targets Android 16 (API 36), runs on Android 7+ |
+| Live wallpaper (since 1.1.0) | [ANDROID_WALLPAPER.md](ANDROID_WALLPAPER.md). Build the site with `npm run build:android` before `./gradlew`. |
 
 **Files you were sent** (from the build session, not in git):
 - `lyric-lights-1.0.0.aab`: upload this to Play Console.
@@ -150,8 +151,9 @@ Lyric Lights is an independent project. It is not affiliated with or endorsed by
 Website changes need nothing here. To change the shell (icon, name, colors, version):
 
 1. Edit `android/twa-manifest.json`, then bump `appVersionCode` (and `appVersionName`). In `android/app/build.gradle`, match `versionCode`/`versionName`.
-2. Build and sign. This needs JDK 17 and Android SDK 36; Android Studio includes both.
+2. Build and sign. This needs JDK 17 and Android SDK 36; Android Studio includes both. The live wallpaper bundles a copy of the site, so build that first.
    ```bash
+   npm run build:android
    cd android
    ./gradlew bundleRelease
    jarsigner -keystore lyric-lights-upload.keystore -sigalg SHA256withRSA -digestalg SHA-256 app/build/outputs/bundle/release/app-release.aab upload

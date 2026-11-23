@@ -2,6 +2,8 @@
 
 📱 **Android:** installable from Chrome today; Google Play app in [docs/ANDROID.md](docs/ANDROID.md).
 
+📱 **Android live wallpaper:** the visualizer behind your home screen icons, no Spotify login needed. See [docs/ANDROID_WALLPAPER.md](docs/ANDROID_WALLPAPER.md).
+
 A live visualizer for whatever you're playing on Spotify. Play a song on any device and this page turns it into light:
 
 - **Album art → colors.** The cover is quantized into a palette (median cut, written from scratch) that drives the background, glow and particles.
@@ -59,6 +61,7 @@ There is no backend. The page logs in with **Authorization Code + PKCE**, so it 
 | `src/render/camera.ts` | Spring "camera" that moves with kicks and snares |
 | `src/render/lyricAnim.ts`, `karaoke.ts` | Lyric animations, word fill, countdowns |
 | `src/settings.ts` | Settings with validation (stored values are untrusted) |
+| `src/androidWallpaper.ts` | `?android-wallpaper` mode for the Android live wallpaper: song data from the app, frame cap |
 | `src/render/styles/` | The four visual styles |
 | `src/render/` | Particle effects, lyric typography, idle screen |
 

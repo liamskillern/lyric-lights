@@ -15,6 +15,7 @@ import { FONT_CHOICES, FONTS, loadFont, resolveFont, type FontChoice } from "./f
 import { estimateTempoFromLyrics, GUESS_CONFIDENCE, type TempoGuess } from "./tempo";
 import { BeatClock, breathFor, pulseEnvelope, pumpFor, TapTempo, type ClockSource } from "./beatClock";
 import { Visualizer } from "./render/visualizer";
+import { FrameGate, IDLE_FPS, isFromHost, isAndroidWallpaper, parseHostMessage, QUALITIES, type Quality } from "./androidWallpaper";
 
 // ---------- DOM ----------
 
@@ -91,6 +92,8 @@ function toast(msg: string, ms = 2600): void {
 // ---------- state ----------
 
 const isDemo = new URLSearchParams(location.search).has("demo");
+/** running inside the Android live wallpaper (see androidWallpaper.ts) */
+const isAndroidWp = isAndroidWallpaper(location.search);
 const viz = new Visualizer(canvas);
 const audio = new AudioInput();
 audio.onEnded = () => {
@@ -422,6 +425,10 @@ let lastScene: SceneTarget | null = null;
 const LEAD_MS = 150; // show a line just before it's sung
 
 function loop(now: number): void {
+  if (isAndroidWp && !wallpaperFrame(now)) {
+    requestAnimationFrame(loop);
+    return;
+  }
   if (demo) {
     const p = demo.playback(now);
     if (p.track?.id !== state.trackId || !state.playback.track) onPlayback(p);
@@ -764,9 +771,57 @@ function registerServiceWorker(): void {
   navigator.serviceWorker.register(`${base}sw.js`, { scope: base }).catch(() => {});
 }
 
+// ---------- Android live wallpaper ----------
+
+const gate = new FrameGate(QUALITIES.balanced.fps);
+let quality: Quality = "balanced";
+let wallpaperVisible = true;
+
+/** Wallpaper mode: should this frame be drawn? Fewer frames on the clock screen, none while hidden. */
+function wallpaperFrame(now: number): boolean {
+  if (!wallpaperVisible) return false;
+  gate.fps = viz.idle ? IDLE_FPS : QUALITIES[quality].fps;
+  return gate.shouldDraw(now);
+}
+
+function startAndroidWallpaper(): void {
+  document.body.classList.add("android-wallpaper");
+  panel.hidden = true;
+  hud.hidden = true;
+  hint.hidden = true;
+  viz.idleHint = "Play some music";
+  viz.maxDpr = QUALITIES[quality].maxDpr;
+  // Wallpaper defaults: calmer motion, no Up next card (the media controls don't share the queue).
+  settings = parseSettings({ ...settings, showUpNext: false, kickMotion: "subtle" }, settings);
+  applySettings(false);
+  // Show the clock until the app says what's playing.
+  onPlayback({ ...NOTHING_PLAYING, at: performance.now() });
+
+  window.addEventListener("message", (e) => {
+    if (!isFromHost(e)) return;
+    const msg = parseHostMessage(e.data);
+    if (!msg) return;
+    if (msg.type === "playback") {
+      onPlayback({ ...msg.playback, at: performance.now() });
+    } else if (msg.type === "settings") {
+      quality = msg.quality;
+      viz.maxDpr = QUALITIES[quality].maxDpr;
+      settings = parseSettings({ ...settings, ...msg.settings }, settings);
+      applySettings(false);
+    } else if (msg.type === "visible") {
+      wallpaperVisible = msg.visible;
+      gate.reset();
+    }
+  });
+}
+
 async function start(): Promise<void> {
   // Refuse to run inside another site's frame (clickjacking). See frame.ts.
   if (isFramed()) return showFramed();
+  if (isAndroidWp) {
+    requestAnimationFrame(loop);
+    return startAndroidWallpaper();
+  }
   registerServiceWorker();
 
   auth.removeLegacyTokens();
