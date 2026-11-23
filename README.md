@@ -2,6 +2,8 @@
 
 📱 **Android:** installable from Chrome today; Google Play app in [docs/ANDROID.md](docs/ANDROID.md).
 
+🖥️ **Windows 11 wallpaper:** run it behind your desktop icons with Wallpaper Engine or Lively, see [docs/WINDOWS_WALLPAPER.md](docs/WINDOWS_WALLPAPER.md).
+
 A live visualizer for whatever you're playing on Spotify. Play a song on any device and this page turns it into light:
 
 - **Album art → colors.** The cover is quantized into a palette (median cut, written from scratch) that drives the background, glow and particles.
@@ -59,6 +61,8 @@ There is no backend. The page logs in with **Authorization Code + PKCE**, so it 
 | `src/render/camera.ts` | Spring "camera" that moves with kicks and snares |
 | `src/render/lyricAnim.ts`, `karaoke.ts` | Lyric animations, word fill, countdowns |
 | `src/settings.ts` | Settings with validation (stored values are untrusted) |
+| `src/wallpaper.ts` | `?wallpaper` mode for desktop wallpapers (no UI, frame cap, remembered login) and `?pair` codes for Wallpaper Engine |
+| `wallpaper-engine/` | Wallpaper Engine package that opens the live site in wallpaper mode |
 | `src/render/styles/` | The four visual styles |
 | `src/render/` | Particle effects, lyric typography, idle screen |
 
@@ -66,7 +70,7 @@ There is no backend. The page logs in with **Authorization Code + PKCE**, so it 
 
 - **PKCE + `state`:** no client secret ships in the page, and a login started by another site is rejected.
 - **Least privilege:** the only scopes are `user-read-currently-playing` and `user-read-playback-state` (read-only).
-- **Token storage:** every GitHub Pages site under `<user>.github.io` shares one browser storage area, so nothing long-lived goes in `localStorage`. The access token stays in memory; the refresh token sits in `sessionStorage` for this tab only and is gone when the tab closes.
+- **Token storage:** every GitHub Pages site under `<user>.github.io` shares one browser storage area, so nothing long-lived goes in `localStorage`. The access token stays in memory; the refresh token sits in `sessionStorage` for this tab only and is gone when the tab closes. The one exception is `?wallpaper` mode, which runs in the wallpaper app's own browser profile and keeps the login so it survives reboots ([why](docs/WINDOWS_WALLPAPER.md#security)).
 - **Clickjacking guard:** GitHub Pages can't send the `frame-ancestors` header, so the page checks whether it's inside a frame and refuses to start (`src/frame.ts`).
 - **Content-Security-Policy** (production build): scripts and styles only from this site, no inline styles, network calls only to Spotify and LRCLIB, images only from Spotify's CDNs, no frames or workers.
 - **Untrusted data:** song titles, lyrics and login error codes are never inserted as HTML. Unknown `?error=` values get a fixed message, so a crafted link can't put its own words on the page. LRCLIB responses are type-checked and capped (1 MB response, 2,000 lines, 300 characters per line).

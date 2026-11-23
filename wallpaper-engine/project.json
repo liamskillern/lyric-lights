@@ -1,0 +1,55 @@
+{
+  "file": "index.html",
+  "title": "Lyric Lights",
+  "type": "web",
+  "preview": "preview.jpg",
+  "description": "Live visualizer for whatever you're playing on Spotify, shaped by the album art and the lyrics. Setup: docs/WINDOWS_WALLPAPER.md",
+  "tags": [
+    "Music",
+    "Abstract"
+  ],
+  "general": {
+    "properties": {
+      "paircode": {
+        "order": 0,
+        "text": "Spotify pairing code",
+        "type": "textinput",
+        "value": ""
+      },
+      "fps": {
+        "order": 1,
+        "text": "Frame rate",
+        "type": "slider",
+        "min": 10,
+        "max": 60,
+        "step": 5,
+        "fraction": false,
+        "value": 30
+      },
+      "style": {
+        "order": 2,
+        "text": "Style",
+        "type": "combo",
+        "value": "glow",
+        "options": [
+          {
+            "label": "Glow",
+            "value": "glow"
+          },
+          {
+            "label": "Aurora",
+            "value": "aurora"
+          },
+          {
+            "label": "Vinyl",
+            "value": "vinyl"
+          },
+          {
+            "label": "Tunnel",
+            "value": "tunnel"
+          }
+        ]
+      }
+    }
+  }
+}
