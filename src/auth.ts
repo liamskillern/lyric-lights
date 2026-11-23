@@ -14,6 +14,8 @@ const SCOPES = ["user-read-currently-playing", "user-read-playback-state"];
 
 const KEY_CLIENT_ID = "sv.clientId";
 const KEY_REFRESH = "sv.refresh";
+/** Refresh token kept across restarts: wallpaper mode only (see setRememberLogin). */
+const KEY_REFRESH_KEPT = "sv.wallpaper.refresh";
 const KEY_VERIFIER = "sv.pkce.verifier";
 const KEY_STATE = "sv.pkce.state";
 /** Where v0.1 kept tokens (localStorage). Deleted on load. */
@@ -138,13 +140,15 @@ export async function beginLogin(clientId: string): Promise<void> {
 export type RedirectResult =
   | { kind: "none" }
   | { kind: "ok" }
+  /** pairing login (see wallpaper.ts): the refresh token to hand over, not saved here */
+  | { kind: "paired"; refreshToken: string }
   | { kind: "error"; message: string };
 
 /**
  * If Spotify just sent us back with ?code=…, trade it for tokens.
  * Always strips the auth params from the address bar afterwards.
  */
-export async function handleRedirect(clientId: string): Promise<RedirectResult> {
+export async function handleRedirect(clientId: string, opts: { pairing?: boolean } = {}): Promise<RedirectResult> {
   const url = new URL(window.location.href);
   const code = url.searchParams.get("code");
   const error = url.searchParams.get("error");
@@ -182,7 +186,13 @@ export async function handleRedirect(clientId: string): Promise<RedirectResult> 
     return { kind: "error", message: "Can't reach Spotify. Check your connection and try again." };
   }
   if (!res.ok) return { kind: "error", message: await describeTokenError(res) };
-  saveTokens(tokensFromResponse(await res.json()));
+  const tokens = tokensFromResponse(await res.json());
+  if (opts.pairing) {
+    // A login made only to hand to a wallpaper: nothing is kept in this browser.
+    if (!tokens.refreshToken) return { kind: "error", message: "Spotify didn't send a pairing code. Please try again." };
+    return { kind: "paired", refreshToken: tokens.refreshToken };
+  }
+  saveTokens(tokens);
   return { kind: "ok" };
 }
 
@@ -206,9 +216,41 @@ export function tokensFromResponse(json: TokenResponse, previousRefresh?: string
 /** Access token in memory only: gone on reload, re-fetched with the refresh token. */
 let memory: { accessToken: string; expiresAt: number } | null = null;
 
+/**
+ * Wallpaper mode only: keep the refresh token in localStorage so the login survives reboots.
+ * A desktop wallpaper app (Lively) runs its own browser profile, so the storage area shared by
+ * every *.github.io site there holds only what you load as wallpapers. The normal app never
+ * reads or writes this key.
+ */
+let remember = false;
+export function setRememberLogin(on: boolean): void {
+  remember = on;
+}
+
+function refreshStore() {
+  return remember ? { s: local, key: KEY_REFRESH_KEPT } : { s: session, key: KEY_REFRESH };
+}
+
 function saveTokens(t: Tokens): void {
   memory = { accessToken: t.accessToken, expiresAt: t.expiresAt };
-  if (t.refreshToken) session.set(KEY_REFRESH, t.refreshToken);
+  const { s, key } = refreshStore();
+  if (t.refreshToken) s.set(key, t.refreshToken);
+}
+
+/** Does this look like a Spotify refresh token (a pairing code)? Pure; tested. */
+export function isValidPairCode(code: string): boolean {
+  return /^[A-Za-z0-9_~.-]{40,1000}$/.test(code.trim());
+}
+
+/**
+ * Wallpaper mode only: log in with a pairing code (a refresh token made by `?pair` in a normal
+ * browser), for wallpaper apps that can't take keyboard input. Returns false if refused.
+ */
+export function importRefreshToken(code: string): boolean {
+  if (!remember || !isValidPairCode(code)) return false;
+  memory = null;
+  local.set(KEY_REFRESH_KEPT, code.trim());
+  return true;
 }
 
 /** Delete tokens that older versions left in localStorage. Safe to call any time. */
@@ -217,12 +259,14 @@ export function removeLegacyTokens(): void {
 }
 
 export function isLoggedIn(): boolean {
-  return memory !== null || session.get(KEY_REFRESH) !== null;
+  const { s, key } = refreshStore();
+  return memory !== null || s.get(key) !== null;
 }
 
 export function logout(): void {
   memory = null;
   session.remove(KEY_REFRESH);
+  local.remove(KEY_REFRESH_KEPT);
   session.remove(KEY_STATE);
   session.remove(KEY_VERIFIER);
   removeLegacyTokens();
@@ -240,7 +284,8 @@ let refreshing: Promise<TokenResult> | null = null;
 /** A working access token, refreshed if it's about to expire. */
 export async function getAccessToken(clientId: string): Promise<TokenResult> {
   if (memory && memory.expiresAt - Date.now() > 60_000) return { kind: "ok", token: memory.accessToken };
-  const refreshToken = session.get(KEY_REFRESH);
+  const { s, key } = refreshStore();
+  const refreshToken = s.get(key);
   if (!refreshToken) return { kind: "logged-out" };
 
   // Several callers may ask at once; only refresh once.
@@ -287,6 +332,7 @@ async function refresh(clientId: string, refreshToken: string): Promise<TokenRes
 export function _resetForTests(): void {
   memory = null;
   refreshing = null;
+  remember = false;
 }
 
 async function describeTokenError(res: Response): Promise<string> {

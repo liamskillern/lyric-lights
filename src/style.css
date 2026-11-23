@@ -106,6 +106,21 @@ body {
   align-items: center;
 }
 
+.card textarea {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  resize: none;
+  margin: 8px 0;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--glass-border);
+  background: rgb(0 0 0 / 0.35);
+  color: var(--text);
+  font: 13px/1.4 ui-monospace, Consolas, monospace;
+  word-break: break-all;
+}
+
 input[type="text"] {
   flex: 1 1 220px;
   min-width: 0;
@@ -119,6 +134,7 @@ input[type="text"] {
 }
 
 input[type="text"]:focus-visible,
+.card textarea:focus-visible,
 button:focus-visible,
 a:focus-visible {
   outline: 2px solid #9d7bff;
@@ -598,4 +614,25 @@ body.idle {
   gap: 10px;
   align-items: center;
   flex-wrap: wrap;
+}
+
+/* ---------- wallpaper mode (?wallpaper, see src/wallpaper.ts) ---------- */
+
+/* A background has no buttons, hints or cursor. Song info stays, clear of the taskbar. */
+body.wallpaper #stage {
+  cursor: none;
+}
+body.wallpaper .controls,
+body.wallpaper .toast {
+  display: none;
+}
+body.wallpaper .hud.idle {
+  opacity: 1;
+}
+body.wallpaper .now-playing {
+  bottom: 72px;
+  left: 24px;
+}
+body.wallpaper .progress {
+  display: none;
 }

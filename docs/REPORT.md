@@ -198,6 +198,7 @@ Spotify permissions requested (both **read-only**): `user-read-currently-playing
 |---|---|---|
 | Spotify access token | Page memory only | Until reload |
 | Spotify refresh token | `sessionStorage` (this tab only) | Until the tab closes or you log out |
+| Spotify refresh token, `?wallpaper` mode only | `localStorage` (`sv.wallpaper.refresh`), inside the wallpaper app's own browser profile | Until you log out or revoke the app ([docs/WINDOWS_WALLPAPER.md](WINDOWS_WALLPAPER.md#security)) |
 | Client ID, settings | `localStorage` | Until cleared; neither is secret |
 | Audio from mic or computer sound | Nowhere: analyzed live, never recorded or sent | Until you turn beat sync off, log out, or the login ends |
 

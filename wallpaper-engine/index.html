@@ -1,0 +1,53 @@
+<!doctype html>
+<!--
+  Lyric Lights for Wallpaper Engine. Setup: docs/WINDOWS_WALLPAPER.md
+
+  This file only hands off to the live site (top-level navigation, not an iframe: the site
+  refuses to run inside frames). Wallpaper Engine gives us this wallpaper's settings first:
+  - Frame rate and style go in the address as &fps= and &style=.
+  - The Spotify pairing code goes after the #, which browsers never send to any server. The
+    site reads it, keeps it as this wallpaper's login, and wipes it from the address bar.
+
+  Running your own copy of the site? Change SITE below.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Lyric Lights</title>
+    <style>
+      html, body { margin: 0; height: 100%; background: #0b0a14; }
+    </style>
+  </head>
+  <body>
+    <script>
+      "use strict";
+      var SITE = "https://liamskillern.github.io/lyric-lights/";
+      var settings = { paircode: "", fps: 30, style: "glow" };
+      var STYLES = ["glow", "aurora", "vinyl", "tunnel"];
+      var gone = false;
+
+      function go() {
+        if (gone) return;
+        gone = true;
+        var fps = Math.min(60, Math.max(10, Math.round(Number(settings.fps) || 30)));
+        var url = SITE + "?wallpaper&fps=" + fps;
+        if (STYLES.indexOf(settings.style) >= 0) url += "&style=" + settings.style;
+        var code = String(settings.paircode || "").trim();
+        if (code) url += "#pair=" + encodeURIComponent(code);
+        window.location.replace(url);
+      }
+
+      window.wallpaperPropertyListener = {
+        applyUserProperties: function (props) {
+          if (props.paircode) settings.paircode = props.paircode.value;
+          if (props.fps) settings.fps = props.fps.value;
+          if (props.style) settings.style = props.style.value;
+          // Wallpaper Engine sends every setting in its first call; go right after it.
+          setTimeout(go, 50);
+        },
+      };
+      // Not running in Wallpaper Engine (or no settings came): go anyway.
+      setTimeout(go, 1500);
+    </script>
+  </body>
+</html>
