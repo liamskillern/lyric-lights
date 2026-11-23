@@ -237,19 +237,35 @@ function saveTokens(t: Tokens): void {
   if (t.refreshToken) s.set(key, t.refreshToken);
 }
 
-/** Does this look like a Spotify refresh token (a pairing code)? Pure; tested. */
+/**
+ * A pairing code is `<Client ID>:<refresh token>`. The Client ID is included because a refresh
+ * token only works with the app that issued it, and the Wallpaper Engine package has no other way
+ * to learn it. A bare refresh token (older codes) is accepted too. Pure; tested.
+ */
+export function parsePairCode(code: string): { clientId: string | null; refreshToken: string } | null {
+  const m = /^(?:([0-9a-f]{32}):)?([A-Za-z0-9_~.-]{40,1000})$/i.exec(code.trim());
+  return m ? { clientId: m[1] ?? null, refreshToken: m[2] } : null;
+}
+
 export function isValidPairCode(code: string): boolean {
-  return /^[A-Za-z0-9_~.-]{40,1000}$/.test(code.trim());
+  return parsePairCode(code) !== null;
+}
+
+/** The pairing code to show for a fresh login. */
+export function makePairCode(clientId: string, refreshToken: string): string {
+  return `${clientId.trim()}:${refreshToken}`;
 }
 
 /**
- * Wallpaper mode only: log in with a pairing code (a refresh token made by `?pair` in a normal
- * browser), for wallpaper apps that can't take keyboard input. Returns false if refused.
+ * Wallpaper mode only: log in with a pairing code (made by `?pair` in a normal browser), for
+ * wallpaper apps that can't take keyboard input. Returns false if refused.
  */
 export function importRefreshToken(code: string): boolean {
-  if (!remember || !isValidPairCode(code)) return false;
+  const parsed = parsePairCode(code);
+  if (!remember || !parsed) return false;
   memory = null;
-  local.set(KEY_REFRESH_KEPT, code.trim());
+  if (parsed.clientId) setClientId(parsed.clientId);
+  local.set(KEY_REFRESH_KEPT, parsed.refreshToken);
   return true;
 }
 

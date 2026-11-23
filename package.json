@@ -8,6 +8,7 @@
     "dev": "vite --host 127.0.0.1 --port 5173 --strictPort",
     "build": "tsc --noEmit && vite build",
     "build:android": "tsc --noEmit && vite build --base=/lyric-lights/",
+    "build:wallpaper-engine": "tsc --noEmit && TARGET=wallpaper-engine vite build && node scripts/make-wallpaper-engine.mjs",
     "preview": "vite preview --host 127.0.0.1 --port 5173 --strictPort",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",

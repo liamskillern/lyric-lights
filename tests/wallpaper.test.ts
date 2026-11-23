@@ -122,6 +122,22 @@ describe("pairing codes (Wallpaper Engine)", () => {
     expect(auth.isValidPairCode(CODE + " " + CODE)).toBe(false);
   });
 
+  it("splits off the Client ID that comes with the code", () => {
+    const id = "0123456789abcdef0123456789abcdef";
+    expect(auth.parsePairCode(`${id}:${CODE}`)).toEqual({ clientId: id, refreshToken: CODE });
+    expect(auth.parsePairCode(CODE)).toEqual({ clientId: null, refreshToken: CODE });
+    expect(auth.parsePairCode(`nothex:${CODE}`)).toBeNull();
+    expect(auth.makePairCode(id, CODE)).toBe(`${id}:${CODE}`);
+  });
+
+  it("a code with a Client ID sets it, for the Wallpaper Engine package", () => {
+    auth.setRememberLogin(true);
+    const id = "abcdef0123456789abcdef0123456789";
+    expect(auth.importRefreshToken(`${id}:${CODE}`)).toBe(true);
+    expect(local.getItem("sv.clientId")).toBe(id);
+    expect(local.getItem("sv.wallpaper.refresh")).toBe(CODE);
+  });
+
   it("imports a code only in wallpaper mode", () => {
     expect(auth.importRefreshToken(CODE)).toBe(false);
     expect(local.dump()).toEqual({});

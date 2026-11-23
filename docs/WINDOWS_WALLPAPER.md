@@ -27,34 +27,45 @@ good wallpaper on its own.
 
 ## Wallpaper Engine
 
+The Wallpaper Engine package is the whole app in one local `index.html` (about 850 KB, fonts
+included). It runs from your PC and talks only to Spotify and LRCLIB, the same as the website.
+
 Wallpaper Engine passes mouse clicks to a web wallpaper but never the keyboard, so you can't type
 your Spotify password into it. Instead you log in once in your normal browser and give the
 wallpaper a **pairing code**.
 
 ### Set it up (about 5 minutes)
 
-1. **Get the package.** Download this repository (green **Code** button → **Download ZIP**) and
-   unzip it, or `git clone` it. You only need the `wallpaper-engine` folder.
-2. **Add it to Wallpaper Engine.** Open Wallpaper Engine, click **Open Wallpaper** (bottom left)
-   → **Open from file**, and pick `wallpaper-engine\project.json`. Lyric Lights shows up in your
-   library; select it to apply. You'll see the "Connect Spotify" card for now.
-3. **Make a pairing code.** In Chrome or Edge, open
+1. **Download the package:**
+   [lyric-lights-wallpaper-engine.zip](https://liamskillern.github.io/lyric-lights/lyric-lights-wallpaper-engine.zip).
+   It's rebuilt by every deploy. To build it yourself instead, run `npm run build:wallpaper-engine`
+   and use `dist-wallpaper-engine/lyric-lights/`.
+2. **Put it where Wallpaper Engine looks.** In Steam, right-click Wallpaper Engine →
+   **Manage → Browse local files**, open `projects\myprojects`, and unzip the download there. You
+   should end up with `projects\myprojects\lyric-lights\` holding `index.html`, `project.json` and
+   `preview.jpg`. If an older `lyric-lights` folder is there, replace it.
+
+   Don't use **Open Wallpaper → Open from file** on `project.json`: that's for importing a single
+   video or web page, and on a `.json` file it fails with "error getting model code".
+3. **Apply it.** Restart Wallpaper Engine. In the **Installed** tab, single-click Lyric Lights and
+   click **OK**. (Don't open it in the editor.) Your desktop shows the pairing instructions.
+4. **Make a pairing code.** In Chrome or Edge, open
    [liamskillern.github.io/lyric-lights/?pair](https://liamskillern.github.io/lyric-lights/?pair),
    click **Log in and make a code**, and log in to Spotify. Click **Copy code**.
-4. **Paste it.** In Wallpaper Engine, with Lyric Lights selected, paste the code into
+5. **Paste it.** Back in Wallpaper Engine, with Lyric Lights selected, paste the code into
    **Spotify pairing code** in the panel on the right. The wallpaper reloads and connects. Close
    the browser tab.
-5. **Play something** on any device. The wallpaper follows it.
+6. **Play something** on any device. The wallpaper follows it.
 
 The same panel has **Frame rate** (30 fps by default) and **Style** (Glow, Aurora, Vinyl,
-Tunnel). Other settings (font, lyric size, effect strength) need the keyboard, so they stay at
-their defaults in Wallpaper Engine.
+Tunnel); both apply straight away. Other settings (font, lyric size, effect strength) need the
+keyboard, so they stay at their defaults in Wallpaper Engine.
 
-How the code gets there: `wallpaper-engine/index.html` reads the wallpaper's settings and opens
-the live site as `?wallpaper&fps=30#pair=<code>`. The part after `#` is never sent to any server,
-and the site wipes it from the address bar as soon as it's read. Spotify replaces the login token
-from time to time, so the wallpaper only takes a code it hasn't seen before; pasting the same code
-again later does nothing. If the wallpaper ever shows the login card again, make a new code.
+About the code: it's `<Client ID>:<Spotify refresh token>`, because a token only works with the
+app that issued it. Spotify replaces the token from time to time, so the wallpaper only takes a
+code it hasn't seen before: Wallpaper Engine hands over the same code on every start, and that
+mustn't undo the newer token. If the wallpaper ever shows the pairing instructions again, make a
+new code.
 
 ### Recommended Wallpaper Engine settings
 
@@ -64,11 +75,15 @@ again later does nothing. If the wallpaper ever shows the login card again, make
 - With two monitors, apply it to each one, or use **Display → Span** under the monitor picker.
   Each copy polls Spotify on its own.
 
-### If it stays on a dark screen
+### Troubleshooting
 
-Wallpaper Engine must let the package open the live site. If it doesn't (a future Wallpaper
-Engine update could block that), the wallpaper stays dark after about 2 seconds. Use Lively
-instead, or open an issue.
+- **"Aw, Snap!"** The first version of the package jumped from the local file to the website,
+  and Wallpaper Engine's built-in browser can crash on that. Download the zip again (step 1) and
+  replace the old folder: the current package never leaves the local file.
+- **Stuck on "Connecting to Spotify…"** Make a new pairing code and paste it. If it still sticks,
+  Spotify may be refusing requests from a local file; use Lively instead and open an issue.
+- **Still crashing:** in Wallpaper Engine, lower **Frame rate** to 20, and try
+  **Settings → General → Web browser → Disable GPU acceleration** (if your version has it).
 
 ## Lively Wallpaper
 
@@ -143,9 +158,12 @@ make a wallpaper show *their* music: it can't read anything of yours.
 Don't open `?wallpaper` in your everyday browser and log in there: that would leave a long-lived
 token in the storage area shared with every other `liamskillern.github.io` page in that browser.
 
-## Why the Wallpaper Engine package redirects instead of embedding
+## Why the Wallpaper Engine package is a local copy
 
-Wallpaper Engine's web wallpapers are local HTML files. Showing the site in an `<iframe>` from one
-would trip Lyric Lights' clickjacking guard (`src/frame.ts`), and a local file can't be a Spotify
-Redirect URI. So the package opens the real page as a top-level page instead, and login, the
-Content-Security-Policy and every other protection work unchanged. Lively loads the URL directly.
+Wallpaper Engine's web wallpapers are local HTML files. Showing the website in an `<iframe>` from
+one would trip Lyric Lights' clickjacking guard (`src/frame.ts`), and jumping from the local file to
+the website crashed Wallpaper Engine's browser ("Aw, Snap!"). So the package is the app itself,
+built as one file (`TARGET=wallpaper-engine`, see `vite.config.ts`). It keeps a strict
+Content-Security-Policy: only its own script and stylesheet (pinned by hash) run, and it can only
+connect to Spotify and LRCLIB. It never opens the Spotify login page; the pairing code replaces
+that. Lively loads the website's URL directly.

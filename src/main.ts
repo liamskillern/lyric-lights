@@ -16,7 +16,7 @@ import { estimateTempoFromLyrics, GUESS_CONFIDENCE, type TempoGuess } from "./te
 import { BeatClock, breathFor, pulseEnvelope, pumpFor, TapTempo, type ClockSource } from "./beatClock";
 import { Visualizer } from "./render/visualizer";
 import { FrameGate, IDLE_FPS, isFromHost, isAndroidWallpaper, parseHostMessage, QUALITIES, type Quality } from "./androidWallpaper";
-import { detectPairing, detectWallpaper, endPairing, FrameCap, isNewPairCode, restoreWallpaperUrl, takePairCode } from "./wallpaper";
+import { DEFAULT_FPS, detectPairing, detectWallpaper, endPairing, FrameCap, isNewPairCode, MAX_FPS, MIN_FPS, restoreWallpaperUrl, takePairCode } from "./wallpaper";
 
 // ---------- DOM ----------
 
@@ -96,16 +96,23 @@ function toast(msg: string, ms = 2600): void {
 const isDemo = new URLSearchParams(location.search).has("demo");
 /** running inside the Android live wallpaper (see androidWallpaper.ts) */
 const isAndroidWp = isAndroidWallpaper(location.search);
+/**
+ * The Wallpaper Engine package: this page is a local file inside Wallpaper Engine (built with
+ * TARGET=wallpaper-engine). It logs in only with a pairing code and never navigates away.
+ */
+const isWallpaperEngine = import.meta.env.VITE_TARGET === "wallpaper-engine";
 /** Making a pairing code for Wallpaper Engine (`?pair`). See wallpaper.ts. */
-const pairing = detectPairing();
+const pairing = isWallpaperEngine ? false : detectPairing();
 /** Running as a desktop wallpaper (`?wallpaper`). See wallpaper.ts. */
-const wallpaper = pairing ? null : detectWallpaper();
-const frameCap = wallpaper ? new FrameCap(wallpaper.fps) : null;
+const wallpaper = isWallpaperEngine ? { fps: DEFAULT_FPS } : pairing ? null : detectWallpaper();
+let frameCap = wallpaper ? new FrameCap(wallpaper.fps) : null;
 if (wallpaper) {
   document.body.classList.add("wallpaper");
   auth.setRememberLogin(true);
 }
 const viz = new Visualizer(canvas);
+// A full-screen background doesn't need extra sharpness; save the GPU memory.
+if (wallpaper) viz.maxDpr = 1;
 const audio = new AudioInput();
 audio.onEnded = () => {
   refreshBeatUi();
@@ -906,16 +913,44 @@ function listenForWallpaperEngine(): void {
         if (typeof code === "string" && code.trim() && (await isNewPairCode(code.trim()))) {
           if (auth.importRefreshToken(code)) return location.reload();
         }
-        // Frame rate or style changed: reload with them in the address.
-        const url = new URL(location.href);
+        // Frame rate and style apply straight away.
         const fps = props.fps?.value;
-        if (typeof fps === "number") url.searchParams.set("fps", String(Math.round(fps)));
+        if (typeof fps === "number" && Number.isFinite(fps)) {
+          frameCap = new FrameCap(Math.min(MAX_FPS, Math.max(MIN_FPS, Math.round(fps))));
+        }
         const style = props.style?.value;
-        if (typeof style === "string") url.searchParams.set("style", style);
-        if (url.search !== location.search) location.replace(url.toString());
+        if (typeof style === "string" && (STYLES as readonly string[]).includes(style) && style !== settings.style) {
+          update({ style: style as Settings["style"] });
+        }
       })();
     },
   };
+}
+
+/** Local Wallpaper Engine package: no redirects, no service worker, login by pairing code only. */
+function startWallpaperEngine(): void {
+  requestAnimationFrame(loop);
+  listenForWallpaperEngine();
+  const clientId = auth.getClientId();
+  if (!clientId || !auth.isLoggedIn()) return showPairNeeded();
+  startVisualizer(clientId, () => showPairNeeded("Your Spotify login ended. Make a new pairing code."));
+}
+
+/** Wallpaper Engine can't type, so the only way in is a pairing code from the website. */
+function showPairNeeded(error?: string): void {
+  const content: Node[] = [
+    h("h1", {}, "Lyric Lights"),
+    h("p", {}, "Connect Spotify with a pairing code:"),
+    h(
+      "ol",
+      {},
+      h("li", {}, "In your browser, open ", h("code", {}, "liamskillern.github.io/lyric-lights/?pair"), " and log in."),
+      h("li", {}, "Copy the code it shows."),
+      h("li", {}, "In Wallpaper Engine, select Lyric Lights and paste it into \"Spotify pairing code\" on the right."),
+    ),
+  ];
+  if (error) content.splice(1, 0, h("p", { className: "error" }, error));
+  showPanel(...content);
 }
 
 async function start(): Promise<void> {
@@ -925,6 +960,7 @@ async function start(): Promise<void> {
     requestAnimationFrame(loop);
     return startAndroidWallpaper();
   }
+  if (isWallpaperEngine) return startWallpaperEngine();
   registerServiceWorker();
 
   auth.removeLegacyTokens();
@@ -944,7 +980,7 @@ async function start(): Promise<void> {
 
   if (pairing) {
     const r = await auth.handleRedirect(clientId, { pairing: true });
-    if (r.kind === "paired") return showPairCode(r.refreshToken);
+    if (r.kind === "paired") return showPairCode(auth.makePairCode(clientId, r.refreshToken));
     return showPairStart(clientId, r.kind === "error" ? r.message : undefined);
   }
 
@@ -961,6 +997,11 @@ async function start(): Promise<void> {
   if (redirect.kind === "error") return showLogin(redirect.message);
   if (!auth.isLoggedIn()) return showLogin();
 
+  startVisualizer(clientId, () => showLogin("Your Spotify session ended. Please connect again."));
+}
+
+/** Logged in: show the visualizer and start following Spotify. */
+function startVisualizer(clientId: string, onLoggedOut: () => void): void {
   showVisualizer();
   void keepAwake();
   wake();
@@ -977,7 +1018,7 @@ async function start(): Promise<void> {
     },
     onLoggedOut: () => {
       endSession();
-      showLogin("Your Spotify session ended. Please connect again.");
+      onLoggedOut();
     },
   });
   poller.start();
