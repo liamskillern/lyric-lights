@@ -108,11 +108,3 @@ export function estimateTempoFromLyrics(lines: LyricLine[]): TempoGuess | null {
   }
   return { bpm: best.bpm, confidence: Math.max(0, Math.min(1, best.score)) };
 }
-
-/** Is there a beat of the grid (every `beatMs`, lined up with `anchorMs`) in (prevMs, nowMs]? (Pure, tested.) */
-export function gridBeat(prevMs: number, nowMs: number, anchorMs: number, beatMs: number): boolean {
-  if (!(beatMs > 0) || nowMs <= prevMs || nowMs - prevMs > beatMs) return false;
-  const k = Math.floor((nowMs - anchorMs) / beatMs);
-  const lastBeat = anchorMs + k * beatMs;
-  return lastBeat > prevMs && lastBeat <= nowMs;
-}

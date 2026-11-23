@@ -44,6 +44,9 @@ const SONGS: DemoSong[] = [
   },
 ];
 
+// Line starts are 2 bars apart: every 4 s at 120 BPM, every 5 s at 96 BPM.
+const DEMO_BPM: Record<string, number> = { "demo-1": 120, "demo-2": 96 };
+
 function makeArt([a, b, c]: [string, string, string], seed: number): HTMLCanvasElement {
   const size = 300;
   const cv = document.createElement("canvas");
@@ -71,6 +74,8 @@ export interface DemoSource {
   lyricsFor(trackId: string): Lyrics;
   artFor(trackId: string): HTMLCanvasElement | null;
   thumbFor(trackId: string): string | null;
+  /** the demo songs' exact tempo, and where the first beat lands */
+  bpmFor(trackId: string): { bpm: number; anchor: number } | null;
   /** the song after this one (demo songs loop) */
   nextAfter(trackId: string): Track | null;
 }
@@ -95,6 +100,11 @@ export function createDemo(start = performance.now()): DemoSource {
     },
     artFor(id) {
       return arts.get(id) ?? null;
+    },
+    bpmFor(id) {
+      const bpm = DEMO_BPM[id];
+      const first = this.lyricsFor(id);
+      return bpm && first.kind === "synced" ? { bpm, anchor: first.lines[0].timeMs } : null;
     },
     nextAfter(id) {
       const i = SONGS.findIndex((s) => s.track.id === id);

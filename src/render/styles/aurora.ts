@@ -14,7 +14,8 @@ export function drawAurora(ctx: CanvasRenderingContext2D, w: number, h: number, 
     { color: colors.blobB, y: 0.52, amp: 0.07, freq: 1.8, phase: 2.1, height: 0.36 },
     { color: mix(colors.accent, colors.text, 0.2), y: 0.3, amp: 0.06, freq: 2.4, phase: 4.2, height: 0.26 },
   ];
-  const lift = 1 + (s.bass ?? 0) * 0.35 + s.pulse * 0.12 + s.chorus * 0.25;
+  const beat = s.beat ?? 0;
+  const lift = 1 + (s.bass ?? 0) * 0.35 + s.pulse * 0.12 + s.chorus * 0.25 + beat * 0.22;
   const steps = 64;
   for (const r of ribbons) {
     // A curtain: a wavy top edge, and light hanging down from it that fades out.
@@ -29,7 +30,7 @@ export function drawAurora(ctx: CanvasRenderingContext2D, w: number, h: number, 
     }
     const hang = h * r.height * lift;
     const g = ctx.createLinearGradient(0, h * (r.y - r.amp * 1.4), 0, h * (r.y + r.amp) + hang);
-    const a = 0.32 * s.brightness;
+    const a = 0.32 * s.brightness * (1 + beat * 0.3);
     g.addColorStop(0, css(r.color, 0));
     g.addColorStop(0.18, css(r.color, a));
     g.addColorStop(0.45, css(r.color, a * 0.45));

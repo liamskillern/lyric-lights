@@ -72,3 +72,11 @@ describe("lyric animation settings", () => {
     expect(parseSettings({ lyricAnim: "explode", karaoke: "yes" }, D)).toMatchObject({ lyricAnim: "rise", karaoke: false });
   });
 });
+
+describe("beat pulse setting", () => {
+  it("defaults to soft and rejects junk", () => {
+    expect(D.beatPulse).toBe("soft");
+    expect(parseSettings({ beatPulse: "punchy" }, D).beatPulse).toBe("punchy");
+    expect(parseSettings({ beatPulse: "earthquake" }, D).beatPulse).toBe("soft");
+  });
+});

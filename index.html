@@ -24,7 +24,7 @@
           <div id="np-title" class="np-title"></div>
           <div id="np-artist" class="np-artist"></div>
           <div id="np-status" class="np-status"></div>
-          <div id="np-time" class="np-time"></div>
+          <div class="np-time-row"><span id="np-time" class="np-time"></span><span id="beat-dot" class="beat-dot" hidden></span></div>
         </div>
       </div>
       <nav class="controls" aria-label="Visualizer controls">
@@ -64,6 +64,17 @@
             <input id="set-strength" type="range" min="0" max="150" step="10" />
             <output id="out-strength"></output>
           </label>
+          <label class="range-row">Beat pulse
+            <select id="set-pulse">
+              <option value="off">Off</option>
+              <option value="soft">Soft</option>
+              <option value="punchy">Punchy</option>
+            </select>
+          </label>
+          <div class="tap-row">
+            <button id="btn-tap" class="small" type="button">Tap the beat</button>
+            <span class="fine-print">or press <kbd>Space</kbd> along with the song, 4+ times</span>
+          </div>
           <label class="range-row">Kick motion
             <select id="set-kick">
               <option value="off">Off</option>
@@ -109,7 +120,6 @@
             <input id="set-sensitivity" type="range" min="0" max="100" step="5" />
             <output id="out-sensitivity"></output>
           </label>
-          <label class="check-row"><input id="set-guessed-pulse" type="checkbox" /> When beat sync is off, pulse to the tempo guessed from the lyrics</label>
           <p class="fine-print">Computer sound works in Chrome or Edge on a computer: share your screen and tick "Also share system audio". Only the sound is used.</p>
         </fieldset>
 

@@ -89,7 +89,7 @@ try {
     await page.waitForFunction(() => document.getElementById("np-title")?.textContent === "Neon Weather");
     check(true, "demo: first song shows in the now-playing box");
     await page.waitForFunction(() => /BPM/.test(document.getElementById("np-time")?.textContent ?? ""), null, { timeout: 5000 }).catch(() => {});
-    check(/~\d+ BPM/.test((await page.textContent("#np-time")) ?? ""), `tempo: guessed BPM shown (${await page.textContent("#np-time")})`);
+    check(/\d+ BPM/.test((await page.textContent("#np-time")) ?? ""), `tempo: BPM shown (${await page.textContent("#np-time")})`);
     await page.waitForTimeout(1500);
     await page.screenshot({ path: `${OUT}demo-title.png` });
     await page.waitForTimeout(3600); // ~5.1 s: "Midnight on the highway, city lights…"
@@ -299,6 +299,64 @@ try {
     check(true, "idle: wakes up when music starts");
     check(errors.length === 0, `idle: no console errors ${errors.join(" | ")}`);
     await ctx.close();
+  }
+
+  // ---- 14. Beat pulser: the background breathes on every beat ----
+  {
+    const page = await browser.newPage({ viewport: { width: 1280, height: 800 }, deviceScaleFactor: 1 });
+    const errors = watchErrors(page);
+    await page.goto(`${BASE}?demo`);
+    await page.waitForTimeout(4_500); // demo song 1 is exactly 120 BPM
+    const samples = [];
+    const t0 = Date.now();
+    while (Date.now() - t0 < 3_000) {
+      samples.push(Number(await page.getAttribute("#stage", "data-pulse")));
+      await page.waitForTimeout(20);
+    }
+    let peaks = 0;
+    for (let i = 1; i < samples.length; i++) if (samples[i] > 0.004 && samples[i] > samples[i - 1] * 1.8 + 0.001) peaks++;
+    check(peaks >= 5 && peaks <= 7, `pulse: ~6 beats in 3 s at 120 BPM (${peaks})`);
+    check(/120 BPM/.test((await page.textContent("#np-time")) ?? "") && (await page.isVisible("#beat-dot")), "pulse: exact BPM and beat dot shown");
+    // Screenshots at a beat and between beats.
+    await page.waitForFunction(() => Number(document.getElementById("stage")?.dataset.pulse) > 0.012, null, { timeout: 3000 });
+    await page.screenshot({ path: `${OUT}pulse-peak.png` });
+    await page.waitForFunction(() => Number(document.getElementById("stage")?.dataset.pulse) < 0.001, null, { timeout: 3000 });
+    await page.screenshot({ path: `${OUT}pulse-rest.png` });
+
+    // Tap tempo: Space 6 times at 600 ms → 100 BPM.
+    // Timed inside the page so test overhead doesn't stretch the gaps.
+    // The software-rendered test browser fires timers up to a frame late, so record the
+    // real tap times and compare the app's answer with the true tapped tempo.
+    const tapTimes = await page.evaluate(async () => {
+      const times = [];
+      for (let i = 0; i < 6; i++) {
+        times.push(performance.now());
+        window.dispatchEvent(new KeyboardEvent("keydown", { key: " " }));
+        await new Promise((r) => setTimeout(r, 600));
+      }
+      return times;
+    });
+    const gaps = tapTimes.slice(1).map((t, i) => t - tapTimes[i]).sort((x, y) => x - y);
+    const trueBpm = 60_000 / ((gaps[2] + gaps[2]) / 2);
+    await page.waitForTimeout(300);
+    const label = (await page.textContent("#np-time")) ?? "";
+    const shown = Number(/(\d+) BPM · tapped/.exec(label)?.[1]);
+    check(Math.abs(shown - trueBpm) <= 2, `pulse: tapping Space sets the beat (${label}; taps were ${trueBpm.toFixed(1)} BPM)`);
+
+    // Off and reduced motion: no breathing zoom.
+    for (const cfg of [{ beatPulse: "off" }, { reducedMotion: true }]) {
+      await page.evaluate((c) => localStorage.setItem("sv.settings", JSON.stringify(c)), cfg);
+      await page.reload();
+      await page.waitForTimeout(4_500);
+      let max = 0;
+      for (let i = 0; i < 40; i++) {
+        max = Math.max(max, Number(await page.getAttribute("#stage", "data-pulse")));
+        await page.waitForTimeout(25);
+      }
+      check(max === 0, `pulse: no zoom with ${JSON.stringify(cfg)} (max ${max})`);
+    }
+    check(errors.length === 0, `pulse: no console errors ${errors.join(" | ")}`);
+    await page.close();
   }
 
   // ---- 13. Lyric animations (A) and karaoke mode (K) ----

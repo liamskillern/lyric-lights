@@ -571,3 +571,31 @@ body.idle {
 #set-offset-reset {
   justify-self: start;
 }
+
+/* Beat dot: blinks on every beat so you can see the pulse is in time. */
+.np-time-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.beat-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: rgb(255 255 255 / 0.25);
+  transition: background 0.18s, transform 0.18s;
+}
+
+.beat-dot.on {
+  background: rgb(255 255 255 / 0.95);
+  transform: scale(1.35);
+  transition: none;
+}
+
+.tap-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}

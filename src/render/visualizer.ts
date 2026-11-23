@@ -7,7 +7,7 @@ import { EFFECTS, noEffects, type Effect, type SceneColors, type SceneTarget } f
 import type { VisualStyle } from "../settings";
 import { blurArt } from "./background";
 import { FONTS, type FontSpec } from "../fonts";
-import { overscan, SpringCamera } from "./camera";
+import { CAMERA_CAP, overscan, SpringCamera } from "./camera";
 import { drawIdle } from "./idle";
 import { calmAnim, type LyricAnim } from "./lyricAnim";
 import { LYRICS_Y, STYLE_DRAW } from "./styles";
@@ -28,8 +28,14 @@ export interface FrameInput {
   snare?: boolean;
   /** position in the song (ms), for word-by-word lyric timing */
   songMs?: number;
-  /** heard tempo, for slow swells once per bar */
-  tempo?: { bpm: number; lastBeatAt: number } | null;
+  /** beat clock pulse 0..1 this frame (undefined = no beat clock running) */
+  beatEnv?: number;
+  /** a new bar started this frame */
+  downbeat?: boolean;
+  /** how much the background zooms on a full beat (settings) */
+  breath?: number;
+  /** how much brighter it gets on a full beat (settings, < 10%) */
+  pump?: number;
 }
 
 interface Smoothed {
@@ -147,8 +153,13 @@ export class Visualizer {
       treble: lerp(this.bands.treble, b.treble, kBand),
     };
 
+    // With the beat clock running, its steady pulse drives everything; the detected
+    // beats still add kick motion and rings below, but don't double-pulse.
+    const clockOn = input.beatEnv !== undefined;
+    const env = input.beatEnv ?? 0;
+    if (input.downbeat) this.effects.beat(0.45, false); // dust pushed out at each bar start
     if (input.beat) {
-      this.pulse = 1;
+      if (!clockOn) this.pulse = 1;
       // The gentle pulse follows every beat; rings (a visible flash) max 3 per second.
       const ring = this.allowFlashes && this.flashes.allow(now);
       this.effects.beat(0.6 + input.level * 0.6, ring);
@@ -159,11 +170,12 @@ export class Visualizer {
     this.camera.strength = this.allowFlashes ? this.kickMotion : 0;
     this.camera.update(dt);
     // Read-only status for tests/debugging: how far the camera is punched in right now.
-    if (now - this.lastCamReport > 100) {
+    if (now - this.lastCamReport > 40) {
       this.lastCamReport = now;
       this.canvas.dataset.camera = this.camera.pos.zoom.toFixed(3);
+      this.canvas.dataset.pulse = (this.idle ? 0 : env * (input.breath ?? 0)).toFixed(3);
     }
-    this.pulse *= Math.exp(-dt * 6);
+    this.pulse = clockOn ? env : this.pulse * Math.exp(-dt * 6);
 
     // Chorus: a burst when it starts, and the lyrics grow a little while it lasts.
     if (target.chorus && !this.wasChorus) this.effects.burst(s.colors, this.allowFlashes);
@@ -189,7 +201,10 @@ export class Visualizer {
     const drift = this.camera.strength > 0 && !this.idle ? 0.006 : 0;
     const tx = (cam.x + Math.sin(this.sceneTime * 0.6) * drift) * m;
     const ty = (cam.y + Math.cos(this.sceneTime * 0.45) * drift) * m;
-    const zoom = (1 + cam.zoom) * overscan({ ...cam, x: tx / m, y: ty / m }, this.w, this.h);
+    // The beat "breath" zooms the whole background with each beat, inside the camera's cap.
+    const breath = this.idle ? 0 : env * (input.breath ?? 0);
+    const zoom = (1 + Math.min(CAMERA_CAP.zoom, cam.zoom + breath)) * overscan({ ...cam, x: tx / m, y: ty / m }, this.w, this.h);
+    const bright = s.brightness * (1 + env * (input.pump ?? 0));
     ctx.save();
     ctx.fillStyle = "#000";
     ctx.fillRect(0, 0, this.w, this.h);
@@ -200,9 +215,10 @@ export class Visualizer {
 
     STYLE_DRAW[style](ctx, this.w, this.h, {
       colors: s.colors,
-      brightness: s.brightness,
+      brightness: bright,
+      beat: this.idle ? 0 : env,
       pulse: this.pulse,
-      bass: Math.min(1, this.bands.bass + this.barSwell(input, now) * 0.35),
+      bass: this.bands.bass,
       t: this.sceneTime * 6,
       art: this.art,
       prevArt: this.prevArt,
@@ -211,7 +227,7 @@ export class Visualizer {
       chorus: this.chorusAmt,
       speed: s.speed,
     });
-    this.effects.draw(ctx, s.effects, s.colors, now / 1000, s.brightness * (1 + this.bands.mid * 0.25), this.bands.treble);
+    this.effects.draw(ctx, s.effects, s.colors, now / 1000, bright * (1 + this.bands.mid * 0.25), this.bands.treble);
     ctx.restore();
 
     drawIdle(ctx, this.w, this.h, now, s.colors.text, s.colors.accent, this.idleAmt, this.idleHint, this.font);
@@ -235,15 +251,6 @@ export class Visualizer {
         title: this.title,
       });
     }
-  }
-
-  /** 0..1 swell that peaks once per bar (4 beats), lined up with the last heard beat. */
-  private barSwell(input: FrameInput, now: number): number {
-    const t = input.tempo;
-    if (!t || !t.bpm || !this.allowFlashes) return 0;
-    const bar = (60_000 / t.bpm) * 4;
-    const phase = (((now - t.lastBeatAt) % bar) + bar) % bar / bar;
-    return 0.5 + 0.5 * Math.cos(phase * Math.PI * 2);
   }
 
   /** For tests and debugging: the current smoothed effect levels. */

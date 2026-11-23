@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { LyricLine } from "../src/lyrics";
-import { estimateTempoFromLyrics, foldBpm, GUESS_CONFIDENCE, gridBeat, TempoTracker } from "../src/tempo";
+import { estimateTempoFromLyrics, foldBpm, GUESS_CONFIDENCE, TempoTracker } from "../src/tempo";
 
 // Small seeded random so tests are repeatable.
 function rng(seed: number) {
@@ -84,19 +84,5 @@ describe("estimateTempoFromLyrics", () => {
 
   it("returns null with too few lines", () => {
     expect(estimateTempoFromLyrics(linesOnBars(120, 4, 1))).toBeNull();
-  });
-});
-
-describe("gridBeat", () => {
-  it("fires once when a grid beat is crossed", () => {
-    expect(gridBeat(990, 1010, 0, 500)).toBe(true);
-    expect(gridBeat(1010, 1030, 0, 500)).toBe(false);
-    expect(gridBeat(1240, 1260, 10, 500)).toBe(false);
-    expect(gridBeat(1490, 1510, 10, 500)).toBe(true);
-  });
-  it("ignores jumps (seeking) and bad input", () => {
-    expect(gridBeat(0, 5000, 0, 500)).toBe(false);
-    expect(gridBeat(100, 90, 0, 500)).toBe(false);
-    expect(gridBeat(0, 10, 0, 0)).toBe(false);
   });
 });

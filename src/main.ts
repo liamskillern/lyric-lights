@@ -12,7 +12,8 @@ import { LYRIC_SIZES, STYLE_NAMES, STYLES, defaultSettings, loadSettings, parseS
 import { shouldIdle } from "./render/idle";
 import { LYRIC_ANIM_NAMES, LYRIC_ANIMS, type LyricAnim } from "./render/lyricAnim";
 import { FONT_CHOICES, FONTS, loadFont, resolveFont, type FontChoice } from "./fonts";
-import { estimateTempoFromLyrics, GUESS_CONFIDENCE, gridBeat, type TempoGuess } from "./tempo";
+import { estimateTempoFromLyrics, GUESS_CONFIDENCE, type TempoGuess } from "./tempo";
+import { BeatClock, breathFor, pulseEnvelope, pumpFor, TapTempo, type ClockSource } from "./beatClock";
 import { Visualizer } from "./render/visualizer";
 
 // ---------- DOM ----------
@@ -44,7 +45,8 @@ const beatMic = $<HTMLButtonElement>("beat-mic");
 const setSensitivity = $<HTMLInputElement>("set-sensitivity");
 const outSensitivity = $<HTMLOutputElement>("out-sensitivity");
 const setUpNext = $<HTMLInputElement>("set-upnext");
-const setGuessedPulse = $<HTMLInputElement>("set-guessed-pulse");
+const setPulse = $<HTMLSelectElement>("set-pulse");
+const btnTap = $<HTMLButtonElement>("btn-tap");
 const setFont = $<HTMLSelectElement>("set-font");
 const setAnim = $<HTMLSelectElement>("set-anim");
 const setKick = $<HTMLSelectElement>("set-kick");
@@ -53,6 +55,13 @@ const btnMic = $<HTMLButtonElement>("btn-mic");
 const btnFull = $<HTMLButtonElement>("btn-full");
 const btnLogout = $<HTMLButtonElement>("btn-logout");
 const npTime = $("np-time");
+const beatDot = $("beat-dot");
+let beatDotTimer = 0;
+function flashBeatDot(): void {
+  beatDot.classList.add("on");
+  clearTimeout(beatDotTimer);
+  beatDotTimer = window.setTimeout(() => beatDot.classList.remove("on"), 110);
+}
 const progressEl = $("progress");
 const progressFill = $("progress-fill");
 const upnext = $("upnext");
@@ -107,8 +116,10 @@ const state = {
   gotPlayback: false,
   /** tempo guessed from this song's lyric timing */
   lyricTempo: null as TempoGuess | null,
-  /** song position on the previous frame (for the guessed beat grid) */
-  prevPos: 0,
+  /** tempo the user tapped for this song */
+  tapped: null as { bpm: number; anchor: number } | null,
+  /** beat number on the previous frame (to spot each new beat) */
+  lastBeatIdx: -1,
   /** next song in the queue, if known */
   next: null as Track | null,
 };
@@ -240,7 +251,10 @@ function updateProgress(now: number, pos: number): void {
   // Set via the style object (CSSOM), which the Content-Security-Policy allows.
   progressFill.style.transform = `scaleX(${Math.min(1, pos / t.durationMs).toFixed(4)})`;
   const tempo = currentTempo();
-  const bpmText = tempo ? ` · ${tempo.heard ? "" : "~"}${Math.round(tempo.bpm)} BPM` : "";
+  const bpmText = tempo
+    ? ` · ${tempo.source === "guessed" ? "~" : ""}${Math.round(tempo.bpm)} BPM${tempo.source === "tapped" ? " · tapped" : ""}`
+    : "";
+  beatDot.hidden = !tempo || settings.beatPulse === "off";
   npTime.textContent = `${formatTime(pos)} / ${formatTime(t.durationMs)}${bpmText}`;
   const left = t.durationMs - pos;
   const show = settings.showUpNext && state.playback.isPlaying && left < 15_000 && !!state.next && state.next.id !== t.id;
@@ -249,12 +263,71 @@ function updateProgress(now: number, pos: number): void {
 }
 
 /** The tempo to use right now: heard from the audio if beat sync is on, else guessed from lyrics. */
-function currentTempo(): { bpm: number; heard: boolean } | null {
+function currentTempo(): { bpm: number; source: ClockSource } | null {
   const heard = audio.bpm;
-  if (heard) return { bpm: heard, heard: true };
+  if (heard) return { bpm: heard, source: "heard" };
+  if (state.tapped) return { bpm: state.tapped.bpm, source: "tapped" };
+  const exact = demo && state.trackId ? demo.bpmFor(state.trackId) : null;
+  if (exact) return { bpm: exact.bpm, source: "exact" };
   const g = state.lyricTempo;
-  if (g && g.confidence >= GUESS_CONFIDENCE) return { bpm: g.bpm, heard: false };
+  if (g && g.confidence >= GUESS_CONFIDENCE) return { bpm: g.bpm, source: "guessed" };
   return null;
+}
+
+// ---------- beat clock ----------
+
+const clock = new BeatClock();
+const taps = new TapTempo();
+
+/**
+ * Keep the beat clock on the best tempo source (heard > tapped > exact > guessed) and in
+ * phase with the music. Runs every frame, in song time.
+ */
+function syncClock(pos: number, lines: LyricLine[] | null, idx: number): void {
+  const tempo = currentTempo();
+  if (!tempo) return clock.clear();
+
+  switch (tempo.source) {
+    case "heard":
+      if (!audio.beat) {
+        if (clock.source === "heard") clock.setTempo(tempo.bpm, pos);
+        return;
+      }
+      // A detected beat: start the clock on it, or nudge the clock toward it.
+      if (clock.source !== "heard" || !clock.lockTo(pos)) {
+        if (clock.source !== "heard" || Math.abs(clock.errorAt(pos)) > clock.beatMs * 0.3) clock.set(tempo.bpm, pos, "heard");
+      }
+      clock.setTempo(tempo.bpm, pos);
+      return;
+    case "tapped":
+      if (clock.source !== "tapped" || clock.anchor !== state.tapped!.anchor) clock.set(tempo.bpm, state.tapped!.anchor, "tapped");
+      return;
+    case "exact": {
+      const e = demo!.bpmFor(state.trackId!)!;
+      if (clock.source !== "exact" || clock.bpm !== e.bpm || clock.anchor !== e.anchor) clock.set(e.bpm, e.anchor, "exact");
+      return;
+    }
+    case "guessed": {
+      // Line up with the current line's start (lines tend to start on the bar).
+      const anchor = lines?.[Math.max(0, idx)]?.timeMs ?? 0;
+      if (clock.source !== "guessed" || Math.abs(clock.bpm - tempo.bpm) > 0.5) clock.set(tempo.bpm, anchor, "guessed");
+      else if (idx >= 0 && lines?.[idx]?.text.trim()) clock.lockTo(anchor);
+      return;
+    }
+  }
+}
+
+/** Space / the Tap button: tap along with the song to set the beat. */
+function tapBeat(): void {
+  if (!state.playback.track) return toast("Play a song first, then tap along.");
+  const pos = positionAt(state.playback, performance.now());
+  const r = taps.tap(pos);
+  if (r) {
+    state.tapped = r;
+    toast(`Beat set: ${Math.round(r.bpm)} BPM (tapped). Keep tapping to fine-tune.`, 2500);
+  } else {
+    toast(`Tap along with the beat… ${Math.max(0, 4 - taps.count)} more`, 1200);
+  }
 }
 
 async function onTrackChange(track: Track | null): Promise<void> {
@@ -269,6 +342,9 @@ async function onTrackChange(track: Track | null): Promise<void> {
   state.syncedLines = null;
   state.song = null;
   state.lyricTempo = null;
+  state.tapped = null;
+  taps.reset();
+  clock.clear();
   npStatus.textContent = "";
 
   if (!track) {
@@ -374,17 +450,20 @@ function loop(now: number): void {
   updateProgress(now, pos);
   audio.update(now);
 
-  // With no audio, optionally pulse on the tempo guessed from the lyrics, lined up with the line starts.
-  let beat = audio.beat;
-  let level = audio.level;
-  if (!audio.active && settings.guessedPulse && tempo && !tempo.heard && lines && state.playback.isPlaying && !idle) {
-    const anchor = lines[Math.max(0, idx)]?.timeMs ?? 0;
-    if (gridBeat(state.prevPos, pos, anchor, 60_000 / tempo.bpm)) {
-      beat = true;
-      level = 0.35;
+  // The beat clock: a pulse on every beat, stronger on bar starts.
+  syncClock(pos, lines, idx);
+  let beatEnv = 0;
+  let downbeat = false;
+  if (clock.running && state.playback.isPlaying && !idle && settings.beatPulse !== "off") {
+    const bi = clock.beatIndexAt(pos);
+    const isBar = ((bi % 4) + 4) % 4 === 0;
+    beatEnv = pulseEnvelope(clock.phaseAt(pos), isBar, settings.beatPulse);
+    if (bi !== state.lastBeatIdx) {
+      state.lastBeatIdx = bi;
+      downbeat = isBar;
+      flashBeatDot();
     }
   }
-  state.prevPos = pos;
 
   viz.frame({
     now,
@@ -392,11 +471,14 @@ function loop(now: number): void {
     lyrics: lines,
     lineIndex: idx,
     songMs: pos + LEAD_MS + settings.lyricOffsetMs,
-    beat,
+    beat: audio.beat,
     snare: audio.snare,
-    level,
+    level: audio.level,
+    beatEnv: clock.running && settings.beatPulse !== "off" ? beatEnv : undefined,
+    downbeat,
+    breath: breathFor(settings.beatPulse, settings.reducedMotion),
+    pump: pumpFor(settings.beatPulse, settings.reducedMotion),
     bands: audio.bands,
-    tempo: tempo && audio.active ? { bpm: tempo.bpm, lastBeatAt: audio.lastBeatAt } : null,
   });
   requestAnimationFrame(loop);
 }
@@ -432,7 +514,7 @@ function syncSettingsForm(): void {
   setSensitivity.value = String(Math.round(settings.beatSensitivity * 100));
   outSensitivity.textContent = `${Math.round(settings.beatSensitivity * 100)}%`;
   setUpNext.checked = settings.showUpNext;
-  setGuessedPulse.checked = settings.guessedPulse;
+  setPulse.value = settings.beatPulse;
   setFont.value = settings.font;
   setAnim.value = settings.lyricAnim;
   setKick.value = settings.kickMotion;
@@ -457,7 +539,8 @@ setKick.addEventListener("change", () => update({ kickMotion: setKick.value as S
 setAnim.addEventListener("change", () => update({ lyricAnim: setAnim.value as LyricAnim }));
 setKaraoke.addEventListener("change", () => update({ karaoke: setKaraoke.checked }));
 setFont.addEventListener("change", () => update({ font: setFont.value as FontChoice }));
-setGuessedPulse.addEventListener("change", () => update({ guessedPulse: setGuessedPulse.checked }));
+setPulse.addEventListener("change", () => update({ beatPulse: setPulse.value as Settings["beatPulse"] }));
+btnTap.addEventListener("click", tapBeat);
 setStyle.addEventListener("change", () => update({ style: setStyle.value as Settings["style"] }));
 
 // Fill the style picker and show it.
@@ -592,6 +675,11 @@ window.addEventListener("keydown", (e) => {
   // Shortcuts are off on the login screen and while the settings dialog is open.
   if (!panel.hidden || settingsDialog.open || e.ctrlKey || e.metaKey || e.altKey) return;
   const k = e.key.toLowerCase();
+  if (k === " ") {
+    e.preventDefault(); // don't scroll or press a focused button
+    tapBeat();
+    return;
+  }
   if (k === "l") toggleLyrics();
   else if (k === "s") openSettings();
   else if (k === "v") cycleStyle();

@@ -108,8 +108,6 @@ export class AudioInput {
   /** snares and claps: a sharp jump in the 1.5–5 kHz "snap" range */
   private snareDetector = new BeatDetector(1.45, 180);
   snare = false;
-  /** performance.now() of the last beat heard */
-  lastBeatAt = 0;
 
   source: AudioSource | null = null;
   level = 0;
@@ -199,7 +197,6 @@ export class AudioInput {
     this.snare = !beat && this.snareDetector.push(bandEnergy(this.bins, hz, 1500, 5000), nowMs).beat;
     if (beat) {
       this.tempo.push(nowMs);
-      this.lastBeatAt = nowMs;
     }
     this.bands = {
       bass: this.gains.bass.push(bass),

@@ -23,7 +23,8 @@ export function drawVinyl(ctx: CanvasRenderingContext2D, w: number, h: number, s
   // Spin: scene time already runs faster for faster songs.
   const dt = Math.max(0, Math.min(0.2, s.t - lastT));
   lastT = s.t;
-  angle += dt * 0.9;
+  const beat = s.beat ?? 0;
+  angle += dt * (0.9 + beat * 2.2); // a little forward nudge on each beat
 
   const { cx, cy, r } = vinylGeometry(w, h);
   ctx.globalCompositeOperation = "screen";
@@ -44,7 +45,7 @@ export function drawVinyl(ctx: CanvasRenderingContext2D, w: number, h: number, s
 
   ctx.rotate(angle);
   // Grooves.
-  const glow = 0.05 + s.pulse * 0.12 + s.chorus * 0.05;
+  const glow = 0.05 + s.pulse * 0.12 + s.chorus * 0.05 + beat * 0.1;
   ctx.lineWidth = 1;
   for (let rr = r * 0.46; rr < r * 0.97; rr += r * 0.022) {
     ctx.strokeStyle = css(colors.text, glow * (0.6 + 0.4 * Math.sin(rr)));

@@ -8,6 +8,7 @@ A live visualizer for whatever you're playing on Spotify. Play a song on any dev
 - **Lyric speed → motion.** Words per minute, measured from the lyric timestamps, sets how fast everything moves. Fast rap moves; ballads drift.
 - **Beat → pulse (optional).** Spotify's audio is DRM-protected, so the page can't read it directly. In Chrome or Edge on a computer it can listen to the **computer's sound** through the screen-share prompt ("Also share system audio"; the picture is thrown away). On phones it uses the mic. Bass, mids and treble drive the glow, brightness and sparkle; flashes are capped at 3 per second (WCAG 2.3.1).
 - **Tempo → speed.** BPM is heard from the beat (median of beat gaps) or guessed from lyric timing (how line starts fit a bar grid). Faster songs move faster; "~" marks a guess.
+- **Beat pulse.** A beat clock keeps a steady pulse at the song's tempo, so the whole background breathes on every beat, harder on each bar's first beat. The beat comes from beat sync (phase-locked to the detected kicks), from tapping **Space** along with the song, or from the lyric-timing guess. A dot next to the BPM blinks in time. Brightness changes stay under 10% (WCAG flash threshold).
 - **Kick motion.** The background rides the drums: kicks punch in and push it around in turn (down, left, up, right), snares shake it sideways, all on springs with a small bounce, capped at ~4% of the screen. The lyrics stay still.
 - **Fonts** (`T`): Modern, Poster, Elegant, Marker, Retro, Mono, or Auto (picked per song). Self-hosted, so no font service is contacted.
 - **Lyric animations** (`A`): Rise, Fade, Pop, Slide, Typewriter, Karaoke words.
@@ -49,6 +50,7 @@ There is no backend. The page logs in with **Authorization Code + PKCE**, so it 
 | `src/scene.ts` | Maps everything to colors, speed, brightness and effect levels |
 | `src/audio.ts` | Beat detection and bass/mid/treble from computer sound or the mic, flash limiter |
 | `src/tempo.ts` | Tempo from beats or from lyric timing |
+| `src/beatClock.ts` | Phase-locked beat clock, tap tempo, pulse shape |
 | `src/fonts.ts` | Self-hosted fonts and the Auto font pick |
 | `src/render/camera.ts` | Spring "camera" that moves with kicks and snares |
 | `src/render/lyricAnim.ts`, `karaoke.ts` | Lyric animations, word fill, countdowns |
@@ -82,7 +84,7 @@ npm run dev
 
 Open http://127.0.0.1:5173/ and paste your Client ID when asked, or put it in `.env` as `VITE_SPOTIFY_CLIENT_ID` (see `.env.example`). The Client ID isn't a secret.
 
-**Keys:** `B` beat sync · `M` beat from the mic · `V` next style · `T` next font · `A` next lyric animation · `K` karaoke mode · `S` settings · `L` lyrics on/off · `F` full screen · `[` / `]` nudge lyric timing (useful with Bluetooth delay) · `0` reset timing.
+**Keys:** `Space` tap the beat · `B` beat sync · `M` beat from the mic · `V` next style · `T` next font · `A` next lyric animation · `K` karaoke mode · `S` settings · `L` lyrics on/off · `F` full screen · `[` / `]` nudge lyric timing (useful with Bluetooth delay) · `0` reset timing.
 
 ## Tests
 

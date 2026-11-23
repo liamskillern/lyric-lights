@@ -2,6 +2,7 @@
 // Stored values are treated as untrusted: anything missing, the wrong type or out of
 // range falls back to the default, so a broken or tampered value can't break the app.
 
+import type { PulseShape } from "./beatClock";
 import { FONT_CHOICES, type FontChoice } from "./fonts";
 import { LYRIC_ANIMS, type LyricAnim } from "./render/lyricAnim";
 import { local } from "./storage";
@@ -37,8 +38,8 @@ export interface Settings {
   /** 0 (fewer beats) .. 1 (more beats) */
   beatSensitivity: number;
   showUpNext: boolean;
-  /** pulse on the tempo guessed from lyrics when beat sync is off */
-  guessedPulse: boolean;
+  /** how strongly the background breathes on every beat */
+  beatPulse: PulseShape;
   /** how much the background moves with kicks and snares */
   kickMotion: "off" | "subtle" | "strong";
   /** calmer: slower, fewer particles, no flashes */
@@ -61,7 +62,7 @@ export function defaultSettings(prefersReducedMotion = false, canShareSystemAudi
     beatSource: canShareSystemAudio ? "system" : "mic",
     beatSensitivity: 0.5,
     showUpNext: true,
-    guessedPulse: false,
+    beatPulse: "soft",
     kickMotion: "subtle",
     reducedMotion: prefersReducedMotion,
   };
@@ -88,7 +89,7 @@ export function parseSettings(raw: unknown, defaults: Settings): Settings {
     beatSource: oneOf(r.beatSource, ["system", "mic"] as const, defaults.beatSource),
     beatSensitivity: num(r.beatSensitivity, 0, 1, defaults.beatSensitivity),
     showUpNext: bool(r.showUpNext, defaults.showUpNext),
-    guessedPulse: bool(r.guessedPulse, defaults.guessedPulse),
+    beatPulse: oneOf(r.beatPulse, ["off", "soft", "punchy"] as const, defaults.beatPulse),
     kickMotion: oneOf(r.kickMotion, ["off", "subtle", "strong"] as const, defaults.kickMotion),
     reducedMotion: bool(r.reducedMotion, defaults.reducedMotion),
   };

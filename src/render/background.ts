@@ -38,6 +38,8 @@ export interface BackgroundState {
   chorus: number;
   /** current motion speed (≈0.15..2.4) */
   speed: number;
+  /** beat clock pulse 0..1: peaks on each beat (0 when off) */
+  beat?: number;
 }
 
 export function baseGradient(ctx: CanvasRenderingContext2D, w: number, h: number, colors: SceneColors): void {
