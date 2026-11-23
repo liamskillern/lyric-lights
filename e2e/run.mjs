@@ -88,6 +88,8 @@ try {
     await page.goto(`${BASE}?demo`);
     await page.waitForFunction(() => document.getElementById("np-title")?.textContent === "Neon Weather");
     check(true, "demo: first song shows in the now-playing box");
+    await page.waitForFunction(() => /BPM/.test(document.getElementById("np-time")?.textContent ?? ""), null, { timeout: 5000 }).catch(() => {});
+    check(/~\d+ BPM/.test((await page.textContent("#np-time")) ?? ""), `tempo: guessed BPM shown (${await page.textContent("#np-time")})`);
     await page.waitForTimeout(1500);
     await page.screenshot({ path: `${OUT}demo-title.png` });
     await page.waitForTimeout(3600); // ~5.1 s: "Midnight on the highway, city lights…"

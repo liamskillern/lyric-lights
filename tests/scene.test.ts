@@ -52,3 +52,11 @@ describe("computeScene", () => {
     expect(luminance(s.colors.bottom)).toBeLessThan(0.05);
   });
 });
+
+describe("tempo in the scene", () => {
+  it("moves faster for a higher BPM, whatever the lyrics", () => {
+    const slow = computeScene({ palette: DEFAULT_PALETTE, song, lineIndex: 0, isPlaying: true, bpm: 75 });
+    const fast = computeScene({ palette: DEFAULT_PALETTE, song, lineIndex: 0, isPlaying: true, bpm: 165 });
+    expect(fast.speed).toBeGreaterThan(slow.speed * 1.5);
+  });
+});

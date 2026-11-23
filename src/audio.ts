@@ -5,6 +5,8 @@
 //    Clean digital sound, no delay. We keep only the audio and stop the video right away.
 //  - "mic": listens to the music playing in the room. Works on phones too.
 
+import { TempoTracker } from "./tempo";
+
 export type AudioSource = "system" | "mic";
 
 export interface Bands {
@@ -102,6 +104,9 @@ export class AudioInput {
   private bins: Uint8Array<ArrayBuffer> = new Uint8Array(0);
   private detector = new BeatDetector();
   private gains = { bass: new AutoGain(), mid: new AutoGain(), treble: new AutoGain() };
+  private tempo = new TempoTracker();
+  /** performance.now() of the last beat heard */
+  lastBeatAt = 0;
 
   source: AudioSource | null = null;
   level = 0;
@@ -152,6 +157,12 @@ export class AudioInput {
     this.setSensitivity(sensitivity);
     this.gains = { bass: new AutoGain(), mid: new AutoGain(), treble: new AutoGain() };
     this.source = source;
+    this.tempo.reset();
+  }
+
+  /** Tempo heard from the audio, once it has enough beats (about 4 s). */
+  get bpm(): number | null {
+    return this.active ? this.tempo.bpm : null;
   }
 
   stop(): void {
@@ -178,6 +189,10 @@ export class AudioInput {
     const { level, beat } = this.detector.push(bass, nowMs);
     this.level = level;
     this.beat = beat;
+    if (beat) {
+      this.tempo.push(nowMs);
+      this.lastBeatAt = nowMs;
+    }
     this.bands = {
       bass: this.gains.bass.push(bass),
       mid: this.gains.mid.push(bandEnergy(this.bins, hz, 400, 2000)),

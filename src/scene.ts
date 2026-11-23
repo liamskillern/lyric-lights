@@ -51,6 +51,8 @@ export interface SceneInput {
   effectStrength?: number;
   /** user setting: calmer motion, fewer effects */
   reducedMotion?: boolean;
+  /** the song's tempo, heard or guessed; null if unknown */
+  bpm?: number | null;
 }
 
 const COOL: RGB = [12, 18, 48];
@@ -60,7 +62,7 @@ export function noEffects(): Record<Effect, number> {
   return Object.fromEntries(EFFECTS.map((e) => [e, 0])) as Record<Effect, number>;
 }
 
-export function computeScene({ palette, song, lineIndex, isPlaying, effectStrength = 1, reducedMotion = false }: SceneInput): SceneTarget {
+export function computeScene({ palette, song, lineIndex, isPlaying, effectStrength = 1, reducedMotion = false, bpm = null }: SceneInput): SceneTarget {
   const songValence = song?.valence ?? 0;
   const line = song && lineIndex >= 0 ? song.lines[lineIndex] : undefined;
   // The current line nudges the mood; the whole song sets the baseline.
@@ -81,7 +83,14 @@ export function computeScene({ palette, song, lineIndex, isPlaying, effectStreng
   if (isPlaying) {
     const wpmFactor = clamp((song?.wpm ?? 90) / 180, 0, 1.4);
     const lineRush = line?.wordsPerSec != null ? clamp((line.wordsPerSec - 2) / 4, 0, 0.5) : 0;
-    speed = 0.45 + wpmFactor * 0.9 + lineRush * 0.4 + valence * 0.12;
+    if (bpm) {
+      // Tempo known: it sets the pace (~0.8 at 70 BPM, ~1.55 at 170 BPM).
+      const tempoFactor = clamp(0.6 + (bpm - 70) / 100, 0.6, 1.7);
+      speed = 0.35 + tempoFactor * 0.75 + lineRush * 0.3 + valence * 0.1;
+    } else {
+      // No tempo: words per minute stand in for how quick the song is.
+      speed = 0.45 + wpmFactor * 0.9 + lineRush * 0.4 + valence * 0.12;
+    }
   }
   const chorus = Boolean(line?.chorus) && isPlaying;
   if (chorus) speed *= 1.2;

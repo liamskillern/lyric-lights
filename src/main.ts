@@ -10,6 +10,7 @@ import { computeScene, type SceneTarget } from "./scene";
 import { formatTime, NOTHING_PLAYING, positionAt, SpotifyPoller, type Playback, type Track } from "./spotify";
 import { LYRIC_SIZES, STYLE_NAMES, STYLES, defaultSettings, loadSettings, parseSettings, saveSettings, type Settings } from "./settings";
 import { shouldIdle } from "./render/idle";
+import { estimateTempoFromLyrics, GUESS_CONFIDENCE, gridBeat, type TempoGuess } from "./tempo";
 import { Visualizer } from "./render/visualizer";
 
 // ---------- DOM ----------
@@ -41,6 +42,7 @@ const beatMic = $<HTMLButtonElement>("beat-mic");
 const setSensitivity = $<HTMLInputElement>("set-sensitivity");
 const outSensitivity = $<HTMLOutputElement>("out-sensitivity");
 const setUpNext = $<HTMLInputElement>("set-upnext");
+const setGuessedPulse = $<HTMLInputElement>("set-guessed-pulse");
 const btnMic = $<HTMLButtonElement>("btn-mic");
 const btnFull = $<HTMLButtonElement>("btn-full");
 const btnLogout = $<HTMLButtonElement>("btn-logout");
@@ -97,6 +99,10 @@ const state = {
   lastPlayingAt: 0,
   /** at least one answer from Spotify so far */
   gotPlayback: false,
+  /** tempo guessed from this song's lyric timing */
+  lyricTempo: null as TempoGuess | null,
+  /** song position on the previous frame (for the guessed beat grid) */
+  prevPos: 0,
   /** next song in the queue, if known */
   next: null as Track | null,
 };
@@ -227,11 +233,22 @@ function updateProgress(now: number, pos: number): void {
   }
   // Set via the style object (CSSOM), which the Content-Security-Policy allows.
   progressFill.style.transform = `scaleX(${Math.min(1, pos / t.durationMs).toFixed(4)})`;
-  npTime.textContent = `${formatTime(pos)} / ${formatTime(t.durationMs)}`;
+  const tempo = currentTempo();
+  const bpmText = tempo ? ` · ${tempo.heard ? "" : "~"}${Math.round(tempo.bpm)} BPM` : "";
+  npTime.textContent = `${formatTime(pos)} / ${formatTime(t.durationMs)}${bpmText}`;
   const left = t.durationMs - pos;
   const show = settings.showUpNext && state.playback.isPlaying && left < 15_000 && !!state.next && state.next.id !== t.id;
   upnext.hidden = false;
   upnext.classList.toggle("show", show);
+}
+
+/** The tempo to use right now: heard from the audio if beat sync is on, else guessed from lyrics. */
+function currentTempo(): { bpm: number; heard: boolean } | null {
+  const heard = audio.bpm;
+  if (heard) return { bpm: heard, heard: true };
+  const g = state.lyricTempo;
+  if (g && g.confidence >= GUESS_CONFIDENCE) return { bpm: g.bpm, heard: false };
+  return null;
 }
 
 async function onTrackChange(track: Track | null): Promise<void> {
@@ -245,6 +262,7 @@ async function onTrackChange(track: Track | null): Promise<void> {
   state.lyrics = { kind: "none" };
   state.syncedLines = null;
   state.song = null;
+  state.lyricTempo = null;
   npStatus.textContent = "";
 
   if (!track) {
@@ -290,6 +308,7 @@ async function onTrackChange(track: Track | null): Promise<void> {
     case "synced":
       state.syncedLines = lyrics.lines;
       state.song = analyzeSong(lyrics.lines, titleText);
+      state.lyricTempo = estimateTempoFromLyrics(lyrics.lines);
       npStatus.textContent = "";
       break;
     case "plain":
@@ -328,7 +347,9 @@ function loop(now: number): void {
   viz.idle = idle;
 
   // Only recompute the scene when its inputs change.
-  const key = `${state.loadToken}|${idx}|${state.playback.isPlaying}|${state.song ? 1 : 0}|${state.palette === DEFAULT_PALETTE}|${idle}`;
+  const tempo = currentTempo();
+  const bpmKey = tempo ? Math.round(tempo.bpm / 4) : 0; // re-plan when tempo moves ~4 BPM
+  const key = `${state.loadToken}|${idx}|${state.playback.isPlaying}|${state.song ? 1 : 0}|${state.palette === DEFAULT_PALETTE}|${idle}|${bpmKey}`;
   if (key !== lastSceneKey || !lastScene) {
     lastSceneKey = key;
     lastScene = computeScene({
@@ -337,13 +358,36 @@ function loop(now: number): void {
       lineIndex: idle ? -1 : idx,
       isPlaying: idle ? false : state.playback.isPlaying,
       effectStrength: settings.effectStrength,
+      bpm: idle ? null : (tempo?.bpm ?? null),
       reducedMotion: settings.reducedMotion,
     });
   }
 
   updateProgress(now, pos);
   audio.update(now);
-  viz.frame({ now, target: lastScene, lyrics: lines, lineIndex: idx, beat: audio.beat, level: audio.level, bands: audio.bands });
+
+  // With no audio, optionally pulse on the tempo guessed from the lyrics, lined up with the line starts.
+  let beat = audio.beat;
+  let level = audio.level;
+  if (!audio.active && settings.guessedPulse && tempo && !tempo.heard && lines && state.playback.isPlaying && !idle) {
+    const anchor = lines[Math.max(0, idx)]?.timeMs ?? 0;
+    if (gridBeat(state.prevPos, pos, anchor, 60_000 / tempo.bpm)) {
+      beat = true;
+      level = 0.35;
+    }
+  }
+  state.prevPos = pos;
+
+  viz.frame({
+    now,
+    target: lastScene,
+    lyrics: lines,
+    lineIndex: idx,
+    beat,
+    level,
+    bands: audio.bands,
+    tempo: tempo && audio.active ? { bpm: tempo.bpm, lastBeatAt: audio.lastBeatAt } : null,
+  });
   requestAnimationFrame(loop);
 }
 
@@ -374,6 +418,7 @@ function syncSettingsForm(): void {
   setSensitivity.value = String(Math.round(settings.beatSensitivity * 100));
   outSensitivity.textContent = `${Math.round(settings.beatSensitivity * 100)}%`;
   setUpNext.checked = settings.showUpNext;
+  setGuessedPulse.checked = settings.guessedPulse;
   refreshBeatUi();
 }
 
@@ -390,6 +435,7 @@ setOffset.addEventListener("input", () => update({ lyricOffsetMs: Number(setOffs
 setOffsetReset.addEventListener("click", () => update({ lyricOffsetMs: 0 }));
 setSensitivity.addEventListener("input", () => update({ beatSensitivity: Number(setSensitivity.value) / 100 }));
 setUpNext.addEventListener("change", () => update({ showUpNext: setUpNext.checked }));
+setGuessedPulse.addEventListener("change", () => update({ guessedPulse: setGuessedPulse.checked }));
 setStyle.addEventListener("change", () => update({ style: setStyle.value as Settings["style"] }));
 
 // Fill the style picker and show it.

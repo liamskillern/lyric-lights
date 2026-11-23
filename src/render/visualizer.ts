@@ -21,6 +21,8 @@ export interface FrameInput {
   level: number;
   /** bass / mid / treble 0..1 (all 0 when beat sync is off) */
   bands?: Bands;
+  /** heard tempo, for slow swells once per bar */
+  tempo?: { bpm: number; lastBeatAt: number } | null;
 }
 
 interface Smoothed {
@@ -154,7 +156,7 @@ export class Visualizer {
       colors: s.colors,
       brightness: s.brightness,
       pulse: this.pulse,
-      bass: this.bands.bass,
+      bass: Math.min(1, this.bands.bass + this.barSwell(input, now) * 0.35),
       t: this.sceneTime * 6,
       art: this.art,
       prevArt: this.prevArt,
@@ -182,6 +184,15 @@ export class Visualizer {
         title: this.title,
       });
     }
+  }
+
+  /** 0..1 swell that peaks once per bar (4 beats), lined up with the last heard beat. */
+  private barSwell(input: FrameInput, now: number): number {
+    const t = input.tempo;
+    if (!t || !t.bpm || !this.allowFlashes) return 0;
+    const bar = (60_000 / t.bpm) * 4;
+    const phase = (((now - t.lastBeatAt) % bar) + bar) % bar / bar;
+    return 0.5 + 0.5 * Math.cos(phase * Math.PI * 2);
   }
 
   /** For tests and debugging: the current smoothed effect levels. */

@@ -29,6 +29,8 @@ export interface Settings {
   /** 0 (fewer beats) .. 1 (more beats) */
   beatSensitivity: number;
   showUpNext: boolean;
+  /** pulse on the tempo guessed from lyrics when beat sync is off */
+  guessedPulse: boolean;
   /** calmer: slower, fewer particles, no flashes */
   reducedMotion: boolean;
 }
@@ -46,6 +48,7 @@ export function defaultSettings(prefersReducedMotion = false, canShareSystemAudi
     beatSource: canShareSystemAudio ? "system" : "mic",
     beatSensitivity: 0.5,
     showUpNext: true,
+    guessedPulse: false,
     reducedMotion: prefersReducedMotion,
   };
 }
@@ -68,6 +71,7 @@ export function parseSettings(raw: unknown, defaults: Settings): Settings {
     beatSource: oneOf(r.beatSource, ["system", "mic"] as const, defaults.beatSource),
     beatSensitivity: num(r.beatSensitivity, 0, 1, defaults.beatSensitivity),
     showUpNext: bool(r.showUpNext, defaults.showUpNext),
+    guessedPulse: bool(r.guessedPulse, defaults.guessedPulse),
     reducedMotion: bool(r.reducedMotion, defaults.reducedMotion),
   };
 }
