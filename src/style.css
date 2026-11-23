@@ -599,3 +599,24 @@ body.idle {
   align-items: center;
   flex-wrap: wrap;
 }
+
+/* ---------- wallpaper mode (?wallpaper, see src/wallpaper.ts) ---------- */
+
+/* A background has no buttons, hints or cursor. Song info stays, clear of the taskbar. */
+body.wallpaper #stage {
+  cursor: none;
+}
+body.wallpaper .controls,
+body.wallpaper .toast {
+  display: none;
+}
+body.wallpaper .hud.idle {
+  opacity: 1;
+}
+body.wallpaper .now-playing {
+  bottom: 72px;
+  left: 24px;
+}
+body.wallpaper .progress {
+  display: none;
+}

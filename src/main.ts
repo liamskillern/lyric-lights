@@ -15,6 +15,7 @@ import { FONT_CHOICES, FONTS, loadFont, resolveFont, type FontChoice } from "./f
 import { estimateTempoFromLyrics, GUESS_CONFIDENCE, type TempoGuess } from "./tempo";
 import { BeatClock, breathFor, pulseEnvelope, pumpFor, TapTempo, type ClockSource } from "./beatClock";
 import { Visualizer } from "./render/visualizer";
+import { detectWallpaper, FrameCap, restoreWallpaperUrl } from "./wallpaper";
 
 // ---------- DOM ----------
 
@@ -82,6 +83,7 @@ function h<K extends keyof HTMLElementTagNameMap>(
 
 let toastTimer = 0;
 function toast(msg: string, ms = 2600): void {
+  if (wallpaper) return; // a wallpaper has nobody watching it closely: no pop-ups
   toastEl.textContent = msg;
   toastEl.classList.add("show");
   clearTimeout(toastTimer);
@@ -91,6 +93,13 @@ function toast(msg: string, ms = 2600): void {
 // ---------- state ----------
 
 const isDemo = new URLSearchParams(location.search).has("demo");
+/** Running as a desktop wallpaper (`?wallpaper`). See wallpaper.ts. */
+const wallpaper = detectWallpaper();
+const frameCap = wallpaper ? new FrameCap(wallpaper.fps) : null;
+if (wallpaper) {
+  document.body.classList.add("wallpaper");
+  auth.setRememberLogin(true);
+}
 const viz = new Visualizer(canvas);
 const audio = new AudioInput();
 audio.onEnded = () => {
@@ -201,7 +210,9 @@ function showLogin(error?: string, justLoggedOut = false): void {
     h(
       "p",
       { className: "fine-print" },
-      "Your login is kept only in this tab and forgotten when you close it. There's no server: the page talks straight to Spotify and LRCLIB (for lyrics). ",
+      wallpaper
+        ? "Wallpaper mode keeps you logged in on this wallpaper until you log out or remove the app at spotify.com/account/apps. There's no server: the page talks straight to Spotify and LRCLIB (for lyrics). "
+        : "Your login is kept only in this tab and forgotten when you close it. There's no server: the page talks straight to Spotify and LRCLIB (for lyrics). ",
       link("privacy.html", "Privacy policy"),
       ".",
     ),
@@ -422,6 +433,10 @@ let lastScene: SceneTarget | null = null;
 const LEAD_MS = 150; // show a line just before it's sung
 
 function loop(now: number): void {
+  if (frameCap && !frameCap.ready(now)) {
+    requestAnimationFrame(loop);
+    return;
+  }
   if (demo) {
     const p = demo.playback(now);
     if (p.track?.id !== state.trackId || !state.playback.track) onPlayback(p);
@@ -732,6 +747,8 @@ function wake(): void {
 // Keep the screen awake while visualizing (phones, TVs).
 let wakeLock: { release(): Promise<void> } | null = null;
 async function keepAwake(): Promise<void> {
+  // A wallpaper must never stop the monitor from going to sleep.
+  if (wallpaper) return;
   try {
     const nav = navigator as Navigator & { wakeLock?: { request(type: "screen"): Promise<{ release(): Promise<void> }> } };
     if (nav.wakeLock && document.visibilityState === "visible") wakeLock = await nav.wakeLock.request("screen");
@@ -785,6 +802,7 @@ async function start(): Promise<void> {
   if (!clientId) return showSetup();
 
   const redirect = await auth.handleRedirect(clientId);
+  if (wallpaper) restoreWallpaperUrl();
   if (redirect.kind === "error") return showLogin(redirect.message);
   if (!auth.isLoggedIn()) return showLogin();
 

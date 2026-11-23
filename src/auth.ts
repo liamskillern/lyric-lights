@@ -14,6 +14,8 @@ const SCOPES = ["user-read-currently-playing", "user-read-playback-state"];
 
 const KEY_CLIENT_ID = "sv.clientId";
 const KEY_REFRESH = "sv.refresh";
+/** Refresh token kept across restarts: wallpaper mode only (see setRememberLogin). */
+const KEY_REFRESH_KEPT = "sv.wallpaper.refresh";
 const KEY_VERIFIER = "sv.pkce.verifier";
 const KEY_STATE = "sv.pkce.state";
 /** Where v0.1 kept tokens (localStorage). Deleted on load. */
@@ -206,9 +208,25 @@ export function tokensFromResponse(json: TokenResponse, previousRefresh?: string
 /** Access token in memory only: gone on reload, re-fetched with the refresh token. */
 let memory: { accessToken: string; expiresAt: number } | null = null;
 
+/**
+ * Wallpaper mode only: keep the refresh token in localStorage so the login survives reboots.
+ * A desktop wallpaper app (Lively) runs its own browser profile, so the storage area shared by
+ * every *.github.io site there holds only what you load as wallpapers. The normal app never
+ * reads or writes this key.
+ */
+let remember = false;
+export function setRememberLogin(on: boolean): void {
+  remember = on;
+}
+
+function refreshStore() {
+  return remember ? { s: local, key: KEY_REFRESH_KEPT } : { s: session, key: KEY_REFRESH };
+}
+
 function saveTokens(t: Tokens): void {
   memory = { accessToken: t.accessToken, expiresAt: t.expiresAt };
-  if (t.refreshToken) session.set(KEY_REFRESH, t.refreshToken);
+  const { s, key } = refreshStore();
+  if (t.refreshToken) s.set(key, t.refreshToken);
 }
 
 /** Delete tokens that older versions left in localStorage. Safe to call any time. */
@@ -217,12 +235,14 @@ export function removeLegacyTokens(): void {
 }
 
 export function isLoggedIn(): boolean {
-  return memory !== null || session.get(KEY_REFRESH) !== null;
+  const { s, key } = refreshStore();
+  return memory !== null || s.get(key) !== null;
 }
 
 export function logout(): void {
   memory = null;
   session.remove(KEY_REFRESH);
+  local.remove(KEY_REFRESH_KEPT);
   session.remove(KEY_STATE);
   session.remove(KEY_VERIFIER);
   removeLegacyTokens();
@@ -240,7 +260,8 @@ let refreshing: Promise<TokenResult> | null = null;
 /** A working access token, refreshed if it's about to expire. */
 export async function getAccessToken(clientId: string): Promise<TokenResult> {
   if (memory && memory.expiresAt - Date.now() > 60_000) return { kind: "ok", token: memory.accessToken };
-  const refreshToken = session.get(KEY_REFRESH);
+  const { s, key } = refreshStore();
+  const refreshToken = s.get(key);
   if (!refreshToken) return { kind: "logged-out" };
 
   // Several callers may ask at once; only refresh once.
@@ -287,6 +308,7 @@ async function refresh(clientId: string, refreshToken: string): Promise<TokenRes
 export function _resetForTests(): void {
   memory = null;
   refreshing = null;
+  remember = false;
 }
 
 async function describeTokenError(res: Response): Promise<string> {
