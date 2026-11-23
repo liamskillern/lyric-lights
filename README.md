@@ -1,5 +1,7 @@
 # Lyric Lights
 
+📱 **Android:** installable from Chrome today; Google Play app in [docs/ANDROID.md](docs/ANDROID.md).
+
 A live visualizer for whatever you're playing on Spotify. Play a song on any device and this page turns it into light:
 
 - **Album art → colors.** The cover is quantized into a palette (median cut, written from scratch) that drives the background, glow and particles.
@@ -76,7 +78,7 @@ There is no backend. The page logs in with **Authorization Code + PKCE**, so it 
 
 1. Create an app at [developer.spotify.com/dashboard](https://developer.spotify.com/dashboard) and tick **Web API**.
 2. Add the Redirect URIs `http://127.0.0.1:5173/` (local) and `https://<you>.github.io/lyric-lights/` (deployed). Spotify doesn't accept `localhost`; use `127.0.0.1`.
-3. Under **User Management**, add the Spotify accounts that will use it. New apps run in development mode, which only works for accounts listed there.
+3. Under **User Management**, add the Spotify accounts that will use it. New apps run in development mode, which only works for accounts listed there (up to 5 since February 2026), and the app owner needs Spotify Premium.
 4. Run it:
 
 ```bash

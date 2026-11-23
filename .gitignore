@@ -4,3 +4,14 @@ dist/
 .env.local
 *.log
 e2e/screenshots/
+
+# Android: build output and signing keys never go in git
+android/.gradle/
+android/**/build/
+android/local.properties
+android/app/release/
+*.keystore
+*.jks
+*.apk
+*.aab
+*.idsig

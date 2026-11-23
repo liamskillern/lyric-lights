@@ -1,0 +1,57 @@
+{
+  "packageId": "io.github.liamskillern.lyriclights",
+  "host": "liamskillern.github.io",
+  "name": "Lyric Lights",
+  "launcherName": "Lyric Lights",
+  "display": "fullscreen",
+  "themeColor": "#0B0A1A",
+  "themeColorDark": "#0B0A1A",
+  "navigationColor": "#0B0A1A",
+  "navigationColorDark": "#0B0A1A",
+  "navigationDividerColor": "#0B0A1A",
+  "navigationDividerColorDark": "#0B0A1A",
+  "backgroundColor": "#0B0A1A",
+  "enableNotifications": false,
+  "startUrl": "/lyric-lights/",
+  "iconUrl": "https://liamskillern.github.io/lyric-lights/icons/icon-512.png",
+  "maskableIconUrl": "https://liamskillern.github.io/lyric-lights/icons/maskable-512.png",
+  "splashScreenFadeOutDuration": 300,
+  "signingKey": {
+    "path": "./upload.keystore",
+    "alias": "upload"
+  },
+  "appVersionName": "1.0.0",
+  "appVersionCode": 1,
+  "shortcuts": [
+    {
+      "name": "Watch the demo",
+      "shortName": "Demo",
+      "url": "https://liamskillern.github.io/lyric-lights/?demo",
+      "chosenIconUrl": "https://liamskillern.github.io/lyric-lights/icons/icon-192.png"
+    }
+  ],
+  "generatorApp": "bubblewrap-cli",
+  "webManifestUrl": "https://liamskillern.github.io/lyric-lights/manifest.webmanifest",
+  "fallbackType": "customtabs",
+  "features": {},
+  "alphaDependencies": {
+    "enabled": false
+  },
+  "enableSiteSettingsShortcut": true,
+  "isChromeOSOnly": false,
+  "isMetaQuest": false,
+  "fullScopeUrl": "https://liamskillern.github.io/lyric-lights/",
+  "minSdkVersion": 24,
+  "orientation": "default",
+  "fingerprints": [],
+  "additionalTrustedOrigins": [],
+  "retainedBundles": [],
+  "protocolHandlers": [],
+  "fileHandlers": [],
+  "launchHandlerClientMode": "",
+  "displayOverride": [
+    "fullscreen",
+    "standalone"
+  ],
+  "appVersion": "1.0.0"
+}

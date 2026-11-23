@@ -25,7 +25,8 @@ It runs entirely in the browser. There is no server, no account system and no co
 | Area | State |
 |---|---|
 | Features | All built and live (list below) |
-| Automated tests | 163 unit tests + 77 browser checks, all passing; run on every push |
+| Automated tests | 168 unit tests + 88 browser checks, all passing; run on every push |
+| Android | Installable from Chrome; Play Store app built and signed, waiting on the Play Console steps ([ANDROID.md](ANDROID.md)) |
 | Security review | Done; 10 findings fixed (section 7) |
 | Real Spotify account | **Not tested yet.** Every check so far used simulated Spotify data, because the build machine can't reach Spotify. The first real-world test is still to do (section 2). |
 | Real system-audio beat sync | **Not tested yet** with real music; only with a simulated mic/screen share |
@@ -46,7 +47,7 @@ Open the demo link above. It plays two made-up songs with original lyrics and it
    - `https://liamskillern.github.io/lyric-lights/`
    - `http://127.0.0.1:5173/` (only needed for running it on your own computer)
 3. Tick **Web API** and save.
-4. Under **User Management**, add the Spotify account(s) that will use it. Spotify keeps new apps in *development mode*, which only works for accounts listed there.
+4. Under **User Management**, add the Spotify account(s) that will use it. Spotify keeps new apps in *development mode*, which only works for accounts listed there: **up to 5**, and **the app owner needs Spotify Premium** (Spotify's rules since February 2026).
 5. Copy the app's **Client ID** (it's not a secret). Open the live app, paste it, and click **Connect Spotify**.
 6. Play a song on any device. Your phone works, and the visual shows on the computer or TV running the page.
 
@@ -202,7 +203,7 @@ Spotify permissions requested (both **read-only**): `user-read-currently-playing
 
 **Protections in place**
 - **Login:** OAuth Authorization Code with **PKCE** (no client secret in the page) and a `state` check against login CSRF.
-- **Content-Security-Policy:** scripts and styles only from the site itself, network only to Spotify and LRCLIB, images only from Spotify's CDNs, no frames or workers. Fonts are self-hosted, so no font service sees visitors.
+- **Content-Security-Policy:** scripts and styles only from the site itself, network only to Spotify and LRCLIB, images only from Spotify's CDNs, no frames. The only worker is the site's own offline page (`sw.js`), which never touches Spotify or LRCLIB requests. Fonts are self-hosted, so no font service sees visitors.
 - **Clickjacking guard:** the page refuses to run inside another site's frame.
 - **No HTML injection:** song titles, lyrics and error codes are never inserted as HTML. Unknown `?error=` values in a link get a fixed message.
 - **Untrusted data is checked:** LRCLIB and Spotify responses are type-checked and size-capped (1 MB response, 2,000 lines, 300 characters per line). Caches are bounded.
@@ -235,7 +236,7 @@ Spotify permissions requested (both **read-only**): `user-read-currently-playing
 |---|---|---|---|
 | Windows/Mac, **Chrome or Edge** | ✅ | ✅ Computer sound or mic | Best experience |
 | Firefox, Safari (desktop) | ✅ | Mic only | No computer-sound sharing |
-| Android / iPhone | ✅ | Mic only | Keep-screen-on is requested automatically |
+| Android / iPhone | ✅ | Mic only | Keep-screen-on is requested automatically. **Android:** install from Chrome (⋮ → Install app) or the Play Store app ([ANDROID.md](ANDROID.md)) |
 | TV browser / cast | ✅ | Usually none | Use `Space` to tap the beat, or rely on the guess |
 
 **Using computer sound (Chrome/Edge):** press `B`, choose **Entire screen**, and tick **"Also share system audio"**. That captures the Spotify desktop app too. Sharing just a browser tab works for music playing in that tab. Spotify protects its web-player audio, so if tab sharing gives no beat, use Entire screen.
@@ -244,7 +245,7 @@ Spotify permissions requested (both **read-only**): `user-read-currently-playing
 
 ## 10. Limits and known issues
 
-- **Spotify development mode:** only accounts added under User Management can log in. Everyone else gets "access refused" and can still use the demo. Opening it to the public needs Spotify's approval, which they rarely give to individuals.
+- **Spotify development mode:** only accounts added under User Management can log in (up to 5 per app, and the owner needs Premium, since February 2026). Everyone else gets "access refused" and can still use the demo, or use their own Client ID. Extended quota is only for businesses.
 - **No tempo or beat data from Spotify:** they removed it for new apps in Nov 2024. That's why tempo is heard, tapped or guessed.
 - **Not every song is on LRCLIB.** Without synced lyrics the app shows colors and uses whatever mood and themes the title or plain lyrics give.
 - **The tempo guess from lyrics is rough** (marked with `~`). Tap `Space` or turn on beat sync for accuracy.
@@ -317,8 +318,8 @@ Spotify Web API ──(poll ~1.5 s)──► now playing + position ──► so
 
 ## 14. Testing, deployment, maintenance
 
-- **Unit tests:** 163 (Vitest), covering the LRC parser, PKCE, palette, mood, chorus, tempo, beat clock, camera, settings validation, security cases and more. `npm test`
-- **Browser checks:** 77 (Playwright), against the production build with its security policy, with Spotify and LRCLIB simulated: login and logout, storage, the frame guard, the error link, every style, font and animation, karaoke, idle screen, up next, beat sync with a fake mic, the mic really stopping (double click, Off mid-prompt, session ending), beat pulse timing and tap tempo. `npm run e2e`
+- **Unit tests:** 168 (Vitest), covering the LRC parser, PKCE, palette, mood, chorus, tempo, beat clock, camera, settings validation, security cases, the Android app settings and more. `npm test`
+- **Browser checks:** 88 (Playwright), against the production build with its security policy, with Spotify and LRCLIB simulated: login and logout, storage, the frame guard, the error link, every style, font and animation, karaoke, idle screen, up next, beat sync with a fake mic, the mic really stopping (double click, Off mid-prompt, session ending), beat pulse timing, tap tempo, the app manifest and icons, the offline page and the privacy policy. `npm run e2e`
 - **Deploy:** every push to `main` runs the tests, builds and publishes to GitHub Pages automatically.
 - **Updates:** Dependabot opens weekly pull requests. One is open now (TypeScript 7, Vitest 5, major versions); it needs checking before merging.
 
@@ -327,8 +328,9 @@ Spotify Web API ──(poll ~1.5 s)──► now playing + position ──► so
 ## 15. Next steps
 
 1. **First real test:** create the Spotify app (section 2), play a fast and a slow song, try beat sync on the PC, and tune what feels off.
-2. Review the open Dependabot pull request.
-3. Record a short GIF for the README.
-4. Portfolio write-up for the career folder.
+2. **Google Play:** follow [ANDROID.md](ANDROID.md) (internal testing now; 12 testers for 14 days before going public).
+3. Review the open Dependabot pull request.
+4. Record a short GIF for the README.
+5. Portfolio write-up for the career folder.
 
 **Ideas for later:** smart lights (Hue/WLED) following the same scene · a WebGL renderer for richer effects · a Claude "scene director" (needs a spending cap) · moving to Cloudflare Pages for full storage isolation and real security headers.
