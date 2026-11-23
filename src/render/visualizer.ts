@@ -4,7 +4,9 @@ import { FlashLimiter, SILENT, type Bands } from "../audio";
 import { lerp, mix, type RGB } from "../color";
 import type { LyricLine } from "../lyrics";
 import { EFFECTS, noEffects, type Effect, type SceneColors, type SceneTarget } from "../scene";
-import { blurArt, drawBackground } from "./background";
+import type { VisualStyle } from "../settings";
+import { blurArt } from "./background";
+import { LYRICS_Y, STYLE_DRAW } from "./styles";
 import { Effects } from "./effects";
 import { LyricsLayer } from "./lyrics";
 
@@ -51,6 +53,8 @@ export class Visualizer {
   private title: { name: string; artist: string; shownAt: number } | null = null;
 
   showLyrics = true;
+  style: VisualStyle = "glow";
+  private image: CanvasImageSource | null = null;
   /** lyric size multiplier (settings) */
   lyricScale = 1;
 
@@ -78,6 +82,7 @@ export class Visualizer {
   setArt(image: CanvasImageSource | null, now = performance.now()): void {
     this.prevArt = this.art;
     this.art = blurArt(image);
+    this.image = image;
     this.artSince = now;
   }
 
@@ -138,7 +143,7 @@ export class Visualizer {
     this.effects.update(dt, s.speed, s.effects, s.colors);
 
     const ctx = this.ctx;
-    drawBackground(ctx, this.w, this.h, {
+    STYLE_DRAW[this.style](ctx, this.w, this.h, {
       colors: s.colors,
       brightness: s.brightness,
       pulse: this.pulse,
@@ -147,6 +152,9 @@ export class Visualizer {
       art: this.art,
       prevArt: this.prevArt,
       artAlpha: Math.min(1, (now - this.artSince) / 1500),
+      image: this.image,
+      chorus: this.chorusAmt,
+      speed: s.speed,
     });
     this.effects.draw(ctx, s.effects, s.colors, now / 1000, s.brightness * (1 + this.bands.mid * 0.25), this.bands.treble);
 
@@ -160,7 +168,8 @@ export class Visualizer {
         glow: s.colors.accent,
         pulse: this.pulse,
         chorus: this.chorusAmt,
-        size: this.lyricScale,
+        size: this.lyricScale * (this.style === "vinyl" ? 0.8 : 1),
+        centerY: LYRICS_Y[this.style],
         title: this.title,
       });
     }

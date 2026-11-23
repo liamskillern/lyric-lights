@@ -36,6 +36,8 @@ export interface LyricFrame {
   color: RGB;
   glow: RGB;
   pulse: number;
+  /** vertical center of the lyrics, fraction of height (default 0.5) */
+  centerY?: number;
   /** user setting: lyric size multiplier */
   size?: number;
   /** 0..1, eases in during the chorus: bigger text */
@@ -63,8 +65,9 @@ export class LyricsLayer {
       const age = f.now - f.title.shownAt;
       const a = Math.min(ease(age / 800), 1 - ease((age - 4500) / 900));
       if (a > 0.01) {
-        this.text(ctx, f.title.name, w / 2, h / 2 - base * 0.35, base * 0.95, 800, css(f.color, a), f.glow, a, w * 0.86);
-        this.text(ctx, f.title.artist, w / 2, h / 2 + base * 0.75, base * 0.5, 500, css(f.color, a * 0.7), f.glow, 0, w * 0.86);
+        const ty = h * (f.centerY ?? 0.5);
+        this.text(ctx, f.title.name, w / 2, ty - base * 0.35, base * 0.95, 800, css(f.color, a), f.glow, a, w * 0.86);
+        this.text(ctx, f.title.artist, w / 2, ty + base * 0.75, base * 0.5, 500, css(f.color, a * 0.7), f.glow, 0, w * 0.86);
       }
     }
 
@@ -75,7 +78,7 @@ export class LyricsLayer {
     const cur = lines[f.index]?.text ?? "";
     const prev = f.index > 0 ? lines[f.index - 1].text : "";
     const next = lines[f.index + 1]?.text ?? "";
-    const cy = h * 0.5;
+    const cy = h * (f.centerY ?? 0.5);
 
     // Previous line: drifts up and fades out.
     if (prev && t < 1) {

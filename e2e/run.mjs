@@ -261,6 +261,24 @@ try {
     await ctx.close();
   }
 
+  // ---- 10. Visual styles (V) ----
+  {
+    const page = await browser.newPage({ viewport: { width: 1280, height: 800 }, deviceScaleFactor: 1 });
+    const errors = watchErrors(page);
+    await page.goto(`${BASE}?demo`);
+    await page.waitForTimeout(12500); // into the first chorus
+    for (const name of ["aurora", "vinyl", "tunnel", "glow"]) {
+      await page.keyboard.press("v");
+      await page.waitForTimeout(1200);
+      const style = await page.evaluate(() => JSON.parse(localStorage.getItem("sv.settings") ?? "{}").style);
+      const stats = await canvasStats(page);
+      check(style === name && stats.max > 120, `style: ${name} (drawing, max ${stats.max.toFixed(0)})`);
+      await page.screenshot({ path: `${OUT}style-${name}.png` });
+    }
+    check(errors.length === 0, `styles: no console errors ${errors.join(" | ")}`);
+    await page.close();
+  }
+
   // ---- 9. Settings dialog ----
   {
     const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });

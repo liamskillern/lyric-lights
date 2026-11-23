@@ -8,7 +8,7 @@ import { analyzeSong, analyzeText, type SongMood } from "./mood";
 import { DEFAULT_PALETTE, paletteFromImage, paletteFromUrl, type Palette } from "./palette";
 import { computeScene, type SceneTarget } from "./scene";
 import { formatTime, NOTHING_PLAYING, positionAt, SpotifyPoller, type Playback, type Track } from "./spotify";
-import { LYRIC_SIZES, defaultSettings, loadSettings, parseSettings, saveSettings, type Settings } from "./settings";
+import { LYRIC_SIZES, STYLE_NAMES, STYLES, defaultSettings, loadSettings, parseSettings, saveSettings, type Settings } from "./settings";
 import { Visualizer } from "./render/visualizer";
 
 // ---------- DOM ----------
@@ -341,6 +341,7 @@ function loop(now: number): void {
 /** Push settings into the app (and the form), then save them. */
 function applySettings(save = true): void {
   viz.showLyrics = settings.showLyrics;
+  viz.style = settings.style;
   viz.lyricScale = LYRIC_SIZES[settings.lyricSize];
   viz.allowFlashes = !settings.reducedMotion;
   audio.setSensitivity(settings.beatSensitivity);
@@ -379,6 +380,16 @@ setOffsetReset.addEventListener("click", () => update({ lyricOffsetMs: 0 }));
 setSensitivity.addEventListener("input", () => update({ beatSensitivity: Number(setSensitivity.value) / 100 }));
 setUpNext.addEventListener("change", () => update({ showUpNext: setUpNext.checked }));
 setStyle.addEventListener("change", () => update({ style: setStyle.value as Settings["style"] }));
+
+// Fill the style picker and show it.
+for (const style of STYLES) setStyle.append(h("option", { value: style }, STYLE_NAMES[style]));
+$("style-field").hidden = false;
+
+function cycleStyle(): void {
+  const next = STYLES[(STYLES.indexOf(settings.style) + 1) % STYLES.length];
+  update({ style: next });
+  toast(`Style: ${STYLE_NAMES[next]}`, 1500);
+}
 
 function openSettings(): void {
   if (settingsDialog.open) return settingsDialog.close();
@@ -475,6 +486,7 @@ window.addEventListener("keydown", (e) => {
   const k = e.key.toLowerCase();
   if (k === "l") toggleLyrics();
   else if (k === "s") openSettings();
+  else if (k === "v") cycleStyle();
   else if (k === "b") void toggleBeat();
   else if (k === "m") void toggleBeat("mic");
   else if (k === "f") void toggleFullscreen();
