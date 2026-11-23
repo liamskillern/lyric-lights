@@ -35,9 +35,23 @@ wallpaper a **pairing code**.
 
 1. **Get the package.** Download this repository (green **Code** button → **Download ZIP**) and
    unzip it, or `git clone` it. You only need the `wallpaper-engine` folder.
-2. **Add it to Wallpaper Engine.** Open Wallpaper Engine, click **Open Wallpaper** (bottom left)
-   → **Open from file**, and pick `wallpaper-engine\project.json`. Lyric Lights shows up in your
-   library; select it to apply. You'll see the "Connect Spotify" card for now.
+2. **Add it to Wallpaper Engine.** Copy the whole `wallpaper-engine` folder into Wallpaper
+   Engine's own projects folder, and rename the copy to `lyric-lights`:
+
+   ```
+   C:\Program Files (x86)\Steam\steamapps\common\wallpaper_engine\projects\myprojects\lyric-lights\
+   ```
+
+   It should hold `index.html`, `project.json` and `preview.jpg` directly (not another folder).
+   To find the path if Steam is on another drive: in Steam, right-click Wallpaper Engine →
+   **Manage → Browse local files**, then open `projects\myprojects`. Restart Wallpaper Engine;
+   Lyric Lights appears in the **Installed** tab. Select it and click **OK** to apply. You'll see
+   the "Connect Spotify" card for now.
+
+   Don't use **Open Wallpaper → Open from file** on `project.json`: that's for importing a single
+   video or web page, and on a `.json` file it fails with "error getting model code". (Picking
+   `index.html` there works, but then Wallpaper Engine makes its own project without the pairing
+   code setting.)
 3. **Make a pairing code.** In Chrome or Edge, open
    [liamskillern.github.io/lyric-lights/?pair](https://liamskillern.github.io/lyric-lights/?pair),
    click **Log in and make a code**, and log in to Spotify. Click **Copy code**.
