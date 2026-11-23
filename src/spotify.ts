@@ -1,3 +1,5 @@
+import type { TokenResult } from "./auth";
+
 // Reads what's playing from the Spotify Web API and keeps a smooth playback clock.
 // Spotify has no push events for the Web API, so we poll and fill the gaps locally.
 
@@ -110,17 +112,22 @@ export async function fetchCurrentlyPlaying(token: string): Promise<FetchResult>
   return { kind: "ok", playback: parseCurrentlyPlaying(await res.json(), at) };
 }
 
+export const RETRY_MESSAGE = "Can't reach Spotify. Retrying…";
+
 export interface PollerOptions {
-  getToken: () => Promise<string | null>;
-  onRefreshNeeded: () => Promise<string | null>;
+  getToken: () => Promise<TokenResult>;
+  onRefreshNeeded: () => Promise<TokenResult>;
   onPlayback: (p: Playback) => void;
   onError: (message: string | null) => void;
   onLoggedOut: () => void;
 }
 
+const hasDocument = () => typeof document !== "undefined";
+
 /**
  * Polls every 1.5 s while music plays, slower when paused or the tab is hidden,
  * and right before the current song should end so the next one shows up fast.
+ * Nothing that goes wrong in one poll stops the next one, except being logged out.
  */
 export class SpotifyPoller {
   private timer: ReturnType<typeof setTimeout> | null = null;
@@ -132,13 +139,13 @@ export class SpotifyPoller {
   start(): void {
     this.stopped = false;
     void this.tick();
-    document.addEventListener("visibilitychange", this.onVisibility);
+    if (hasDocument()) document.addEventListener("visibilitychange", this.onVisibility);
   }
 
   stop(): void {
     this.stopped = true;
     if (this.timer) clearTimeout(this.timer);
-    document.removeEventListener("visibilitychange", this.onVisibility);
+    if (hasDocument()) document.removeEventListener("visibilitychange", this.onVisibility);
   }
 
   private onVisibility = () => {
@@ -152,7 +159,7 @@ export class SpotifyPoller {
   }
 
   private nextDelay(): number {
-    if (document.visibilityState === "hidden") return 10_000;
+    if (hasDocument() && document.visibilityState === "hidden") return 10_000;
     if (!this.last.track || !this.last.isPlaying) return 4_000;
     const left = this.last.track.durationMs - positionAt(this.last, performance.now());
     if (left > 0 && left < 1_500) return Math.max(250, left + 150);
@@ -160,13 +167,36 @@ export class SpotifyPoller {
   }
 
   private async tick(): Promise<void> {
-    let token = await this.opts.getToken();
-    if (!token) return this.opts.onLoggedOut();
+    try {
+      await this.poll();
+    } catch {
+      // A bad response or a bug in one poll must not stop the app: report it and keep going.
+      if (this.stopped) return;
+      this.opts.onError(RETRY_MESSAGE);
+      this.pollSoon(5_000);
+    }
+  }
+
+  /** Returns the token, or null after handling "logged out" / "try later". */
+  private handleAuth(auth: TokenResult): string | null {
+    if (auth.kind === "ok") return auth.token;
+    if (auth.kind === "logged-out") {
+      this.opts.onLoggedOut();
+    } else {
+      this.opts.onError(RETRY_MESSAGE);
+      this.pollSoon(5_000);
+    }
+    return null;
+  }
+
+  private async poll(): Promise<void> {
+    let token = this.handleAuth(await this.opts.getToken());
+    if (!token) return;
 
     let result = await fetchCurrentlyPlaying(token);
     if (result.kind === "unauthorized") {
-      token = await this.opts.onRefreshNeeded();
-      if (!token) return this.opts.onLoggedOut();
+      token = this.handleAuth(await this.opts.onRefreshNeeded());
+      if (!token) return;
       result = await fetchCurrentlyPlaying(token);
       if (result.kind === "unauthorized") return this.opts.onLoggedOut();
     }

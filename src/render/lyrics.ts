@@ -95,6 +95,7 @@ export class LyricsLayer {
     if (!lines) {
       ctx.font = `800 ${size}px ${FONT}`;
       lines = wrapText(text, w * 0.84, (s) => ctx.measureText(s).width);
+      if (this.wrapCache.size > 400) this.wrapCache.clear(); // stay small over long sessions
       this.wrapCache.set(k, lines);
     }
     return lines;

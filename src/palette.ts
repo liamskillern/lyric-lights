@@ -2,6 +2,7 @@
 // Written by hand (no library) so it's small, deterministic and testable.
 
 import { adjust, hslToRgb, rgbToHsl, type RGB } from "./color";
+import { LruCache } from "./storage";
 
 export interface Palette {
   /** quantized colors, most common first */
@@ -161,7 +162,7 @@ export function paletteFromImage(image: CanvasImageSource): Palette {
   return buildPalette(quantize(pixelsFromImageData(data), 8));
 }
 
-const paletteCache = new Map<string, Palette>();
+const paletteCache = new LruCache<string, Palette>(50);
 
 /** Load album art and build its palette. Falls back to DEFAULT_PALETTE on failure. */
 export async function paletteFromUrl(url: string): Promise<{ palette: Palette; image: HTMLImageElement | null }> {

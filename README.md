@@ -43,10 +43,14 @@ There is no backend. The page logs in with **Authorization Code + PKCE**, so it 
 ## Security and privacy
 
 - **PKCE + `state`:** no client secret ships in the page, and a login started by another site is rejected.
-- **Content-Security-Policy** (production build): scripts only from this site, network calls only to Spotify and LRCLIB, images only from Spotify's CDNs.
-- **No HTML injection:** song titles and lyrics are drawn on the canvas or set with `textContent`, never `innerHTML`.
-- **Least privilege:** the only scopes are `user-read-currently-playing` and `user-read-playback-state`.
-- Tokens are kept in this browser's `localStorage`, and "Log out" clears them. The mic audio is analyzed live and never recorded or sent anywhere.
+- **Least privilege:** the only scopes are `user-read-currently-playing` and `user-read-playback-state` (read-only).
+- **Token storage:** every GitHub Pages site under `<user>.github.io` shares one browser storage area, so nothing long-lived goes in `localStorage`. The access token stays in memory; the refresh token sits in `sessionStorage` for this tab only and is gone when the tab closes.
+- **Clickjacking guard:** GitHub Pages can't send the `frame-ancestors` header, so the page checks whether it's inside a frame and refuses to start (`src/frame.ts`).
+- **Content-Security-Policy** (production build): scripts and styles only from this site, no inline styles, network calls only to Spotify and LRCLIB, images only from Spotify's CDNs, no frames or workers.
+- **Untrusted data:** song titles, lyrics and login error codes are never inserted as HTML. Unknown `?error=` values get a fixed message, so a crafted link can't put its own words on the page. LRCLIB responses are type-checked and capped (1 MB response, 2,000 lines, 300 characters per line).
+- **Supply chain:** GitHub Actions are pinned to commit hashes, the checkout doesn't leave the token on disk, and Dependabot proposes weekly updates.
+- **Mic:** audio is analyzed live in the browser and never recorded or sent anywhere.
+- **Revoking access:** "Log out" clears the tab. To cut the app off from your Spotify account completely, remove it at [spotify.com/account/apps](https://www.spotify.com/account/apps/).
 
 ## Run it yourself
 

@@ -137,11 +137,24 @@ try {
     const png = Buffer.from(pngB64, "base64");
 
     const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 }, deviceScaleFactor: 1 });
+    // A tab that already logged in: refresh token in sessionStorage. Plus tokens left in
+    // localStorage by the old version, which the app must delete.
     await ctx.addInitScript(() => {
       if (!localStorage.getItem("sv.clientId")) {
         localStorage.setItem("sv.clientId", "0123456789abcdef0123456789abcdef");
-        localStorage.setItem("sv.tokens", JSON.stringify({ accessToken: "fake", refreshToken: "fake-r", expiresAt: Date.now() + 3600e3 }));
+        localStorage.setItem("sv.tokens", JSON.stringify({ accessToken: "old", refreshToken: "old-r", expiresAt: Date.now() + 3600e3 }));
+        sessionStorage.setItem("sv.refresh", "fake-r");
       }
+    });
+    let tokenRequests = 0;
+    await ctx.route("https://accounts.spotify.com/api/token", (route) => {
+      tokenRequests++;
+      route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        headers: { "access-control-allow-origin": "*" },
+        body: JSON.stringify({ access_token: "fake-access", refresh_token: "fake-r2", expires_in: 3600 }),
+      });
     });
     const started = Date.now();
     let spotifyCalls = 0;
@@ -192,7 +205,11 @@ try {
     const errors = watchErrors(page);
     await page.goto(BASE);
     await page.waitForFunction(() => document.getElementById("np-title")?.textContent === "Fireworks Over Water");
-    check(authHeader === "Bearer fake", "spotify: sends the access token");
+    check(tokenRequests === 1, `auth: gets an access token from the refresh token (${tokenRequests} request)`);
+    check(authHeader === "Bearer fake-access", "spotify: sends the access token");
+    const stored = await page.evaluate(() => ({ local: { ...localStorage }, session: { ...sessionStorage } }));
+    check(!JSON.stringify(stored.local).includes("fake") && !("sv.tokens" in stored.local), "storage: no tokens in localStorage (old ones deleted)");
+    check(JSON.stringify(stored.session) === JSON.stringify({ "sv.refresh": "fake-r2" }), "storage: only the rotated refresh token in sessionStorage");
     check((await page.textContent("#np-artist")) === "Test Artist", "spotify: shows the artist");
     await page.waitForFunction(() => document.getElementById("np-status")?.textContent === "");
     check(true, "lyrics: synced lyrics found (status cleared)");
@@ -210,7 +227,37 @@ try {
     await page.click("#btn-logout");
     await page.waitForSelector("text=Connect Spotify");
     check(true, "logout returns to the login screen");
+    check(await page.isVisible("a[href='https://www.spotify.com/account/apps/']"), "logout: shows where to remove access at Spotify");
+    const after = await page.evaluate(() => ({ ...sessionStorage, ...localStorage }));
+    check(!JSON.stringify(after).includes("fake"), "logout: no tokens left in storage");
     await page.screenshot({ path: `${OUT}login.png` });
+    await ctx.close();
+  }
+
+  // ---- 5. Clickjacking: inside another site's frame the app refuses to run ----
+  {
+    const page = await browser.newPage({ viewport: { width: 1000, height: 700 } });
+    await page.setContent(`<h1>evil.example</h1><iframe src="${BASE}?demo" width="900" height="500"></iframe>`);
+    const frame = await (await page.waitForSelector("iframe")).contentFrame();
+    await frame.waitForSelector("text=doesn't run inside other websites");
+    check(true, "framed: shows the refusal message");
+    check(await frame.isHidden("#hud"), "framed: controls never appear");
+    check((await frame.textContent("#np-title")) === "", "framed: the app didn't start");
+    await page.screenshot({ path: `${OUT}framed.png` });
+    await page.close();
+  }
+
+  // ---- 6. Text injection through ?error= ----
+  {
+    const ctx = await browser.newContext();
+    await ctx.addInitScript(() => localStorage.setItem("sv.clientId", "0123456789abcdef0123456789abcdef"));
+    const page = await ctx.newPage();
+    await page.goto(`${BASE}?error=${encodeURIComponent("Your account is hacked. Call 555-0100")}&state=x`);
+    await page.waitForSelector(".card .error");
+    const msg = await page.textContent(".card .error");
+    check(msg === "Login failed. Please try again.", `error link: shows fixed text ("${msg}")`);
+    check(!(await page.content()).includes("555-0100"), "error link: attacker's text isn't on the page");
+    check(!page.url().includes("error="), "error link: removed from the address bar");
     await ctx.close();
   }
 } finally {

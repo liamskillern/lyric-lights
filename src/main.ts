@@ -2,11 +2,13 @@ import "./style.css";
 import { MicListener } from "./audio";
 import * as auth from "./auth";
 import { createDemo, type DemoSource } from "./demo";
+import { isFramed } from "./frame";
 import { fetchLyrics, lineIndexAt, type LyricLine, type Lyrics } from "./lyrics";
 import { analyzeSong, analyzeText, type SongMood } from "./mood";
 import { DEFAULT_PALETTE, paletteFromImage, paletteFromUrl, type Palette } from "./palette";
 import { computeScene, type SceneTarget } from "./scene";
 import { NOTHING_PLAYING, positionAt, SpotifyPoller, type Playback, type Track } from "./spotify";
+import { local } from "./storage";
 import { Visualizer } from "./render/visualizer";
 
 // ---------- DOM ----------
@@ -59,7 +61,7 @@ const state = {
   song: null as SongMood | null,
   palette: DEFAULT_PALETTE as Palette,
   loadToken: 0,
-  lyricOffsetMs: Number(readPref("sv.lyricOffset") ?? 0) || 0,
+  lyricOffsetMs: Number(local.get("sv.lyricOffset") ?? 0) || 0,
 };
 
 let demo: DemoSource | null = null;
@@ -113,7 +115,7 @@ function showSetup(error?: string): void {
   input.focus();
 }
 
-function showLogin(error?: string): void {
+function showLogin(error?: string, justLoggedOut = false): void {
   const btn = h("button", { className: "primary", type: "button" }, "Connect Spotify");
   btn.addEventListener("click", () => {
     const id = auth.getClientId();
@@ -128,10 +130,15 @@ function showLogin(error?: string): void {
     h("p", {}, "Play a song on Spotify anywhere (phone, computer, speaker) and this screen turns it into light: colors from the album art, effects from the lyrics."),
   ];
   if (error) content.push(h("p", { className: "error" }, error));
+  if (justLoggedOut) {
+    content.push(
+      h("p", {}, "You're logged out on this device. To cut this app off from your Spotify account completely, remove it at ", link(auth.REVOKE_URL, "spotify.com/account/apps"), "."),
+    );
+  }
   content.push(
     h("div", { className: "row" }, btn, h("a", { className: "button", href: "?demo" }, "Watch the demo")),
     h("div", { className: "row" }, change),
-    h("p", { className: "fine-print" }, "Your login stays in this browser. There's no server: the page talks straight to Spotify and LRCLIB (for lyrics)."),
+    h("p", { className: "fine-print" }, "Your login is kept only in this tab and forgotten when you close it. There's no server: the page talks straight to Spotify and LRCLIB (for lyrics)."),
   );
   showPanel(...content);
 }
@@ -296,7 +303,7 @@ async function toggleFullscreen(): Promise<void> {
 
 function nudgeLyrics(deltaMs: number): void {
   state.lyricOffsetMs = Math.max(-3000, Math.min(3000, state.lyricOffsetMs + deltaMs));
-  writePref("sv.lyricOffset", String(state.lyricOffsetMs));
+  local.set("sv.lyricOffset", String(state.lyricOffsetMs));
   const s = (state.lyricOffsetMs / 1000).toFixed(1);
   toast(state.lyricOffsetMs === 0 ? "Lyric timing: normal" : `Lyric timing: ${state.lyricOffsetMs > 0 ? "+" : ""}${s}s earlier`);
 }
@@ -309,7 +316,7 @@ btnLogout.addEventListener("click", () => {
   mic.stop();
   void wakeLock?.release();
   auth.logout();
-  location.reload();
+  showLogin(undefined, true);
 });
 
 window.addEventListener("keydown", (e) => {
@@ -352,26 +359,22 @@ document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "visible" && !hud.hidden) void keepAwake();
 });
 
-// ---------- prefs ----------
-
-function readPref(key: string): string | null {
-  try {
-    return localStorage.getItem(key);
-  } catch {
-    return null;
-  }
-}
-function writePref(key: string, value: string): void {
-  try {
-    localStorage.setItem(key, value);
-  } catch {
-    /* fine: just won't be remembered */
-  }
-}
-
 // ---------- start ----------
 
+function showFramed(): void {
+  const open = h("a", { className: "button", href: location.href, target: "_blank", rel: "noopener noreferrer" }, "Open Lyric Lights");
+  showPanel(
+    h("h1", {}, "Lyric Lights"),
+    h("p", {}, "For your safety, Lyric Lights doesn't run inside other websites."),
+    h("div", { className: "row" }, open),
+  );
+}
+
 async function start(): Promise<void> {
+  // Refuse to run inside another site's frame (clickjacking). See frame.ts.
+  if (isFramed()) return showFramed();
+
+  auth.removeLegacyTokens();
   requestAnimationFrame(loop);
 
   if (isDemo) {
