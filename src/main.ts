@@ -15,7 +15,7 @@ import { FONT_CHOICES, FONTS, loadFont, resolveFont, type FontChoice } from "./f
 import { estimateTempoFromLyrics, GUESS_CONFIDENCE, type TempoGuess } from "./tempo";
 import { BeatClock, breathFor, pulseEnvelope, pumpFor, TapTempo, type ClockSource } from "./beatClock";
 import { Visualizer } from "./render/visualizer";
-import { detectWallpaper, FrameCap, restoreWallpaperUrl } from "./wallpaper";
+import { detectPairing, detectWallpaper, endPairing, FrameCap, isNewPairCode, restoreWallpaperUrl, takePairCode } from "./wallpaper";
 
 // ---------- DOM ----------
 
@@ -93,8 +93,10 @@ function toast(msg: string, ms = 2600): void {
 // ---------- state ----------
 
 const isDemo = new URLSearchParams(location.search).has("demo");
+/** Making a pairing code for Wallpaper Engine (`?pair`). See wallpaper.ts. */
+const pairing = detectPairing();
 /** Running as a desktop wallpaper (`?wallpaper`). See wallpaper.ts. */
-const wallpaper = detectWallpaper();
+const wallpaper = pairing ? null : detectWallpaper();
 const frameCap = wallpaper ? new FrameCap(wallpaper.fps) : null;
 if (wallpaper) {
   document.body.classList.add("wallpaper");
@@ -199,6 +201,17 @@ function showLogin(error?: string, justLoggedOut = false): void {
     h("p", {}, "Play a song on Spotify anywhere (phone, computer, speaker) and this screen turns it into light: colors from the album art, effects from the lyrics."),
   ];
   if (error) content.push(h("p", { className: "error" }, error));
+  if (wallpaper) {
+    content.push(
+      h(
+        "p",
+        {},
+        "Using Wallpaper Engine? It can't take typing, so log in from your browser instead: open ",
+        h("code", {}, pairUrl()),
+        ", then paste the code into this wallpaper's \"Spotify pairing code\" setting.",
+      ),
+    );
+  }
   if (justLoggedOut) {
     content.push(
       h("p", {}, "You're logged out on this device. To cut this app off from your Spotify account completely, remove it at ", link(auth.REVOKE_URL, "spotify.com/account/apps"), "."),
@@ -218,6 +231,56 @@ function showLogin(error?: string, justLoggedOut = false): void {
     ),
   );
   showPanel(...content);
+}
+
+function pairUrl(): string {
+  return `${auth.redirectUri()}?pair`;
+}
+
+/** `?pair`: log in only to make a pairing code for Wallpaper Engine. */
+function showPairStart(clientId: string, error?: string): void {
+  const btn = h("button", { className: "primary", type: "button" }, "Log in and make a code");
+  btn.addEventListener("click", () => void auth.beginLogin(clientId));
+  const content: Node[] = [
+    h("h1", {}, "Pair Wallpaper Engine"),
+    h("p", {}, "Wallpaper Engine can't take keyboard input, so you log in here and give the wallpaper a pairing code instead."),
+  ];
+  if (error) content.push(h("p", { className: "error" }, error));
+  content.push(
+    h("div", { className: "row" }, btn),
+    h("p", { className: "fine-print" }, "This login isn't kept in this browser. The code is shown once, here only."),
+  );
+  showPanel(...content);
+}
+
+function showPairCode(code: string): void {
+  endPairing();
+  const box = h("textarea", { readOnly: true, rows: 4, spellcheck: false, value: code });
+  box.setAttribute("aria-label", "Pairing code");
+  box.addEventListener("focus", () => box.select());
+  const copy = h("button", { className: "primary", type: "button" }, "Copy code");
+  copy.addEventListener("click", () => {
+    void navigator.clipboard?.writeText(code).then(() => toast("Pairing code copied"));
+  });
+  showPanel(
+    h("h1", {}, "Your pairing code"),
+    h(
+      "ol",
+      {},
+      h("li", {}, "Copy the code."),
+      h("li", {}, "In Wallpaper Engine, select Lyric Lights and paste it into \"Spotify pairing code\" on the right."),
+      h("li", {}, "Close this tab."),
+    ),
+    box,
+    h("div", { className: "row" }, copy),
+    h(
+      "p",
+      { className: "fine-print" },
+      "Treat it like a password: it lets the wallpaper see what you're playing on Spotify (nothing else). It isn't saved in this browser. To cancel it, remove the app at ",
+      link(auth.REVOKE_URL, "spotify.com/account/apps"),
+      ".",
+    ),
+  );
 }
 
 function link(href: string, text: string): HTMLAnchorElement {
@@ -727,6 +790,7 @@ window.addEventListener("keydown", (e) => {
   else if (k === "0") nudgeLyrics(-settings.lyricOffsetMs);
 });
 
+if (wallpaper?.style) settings = { ...settings, style: wallpaper.style };
 applySettings(false);
 
 // Hide the controls and cursor when the mouse is still.
@@ -781,6 +845,31 @@ function registerServiceWorker(): void {
   navigator.serviceWorker.register(`${base}sw.js`, { scope: base }).catch(() => {});
 }
 
+/**
+ * Wallpaper Engine calls `window.wallpaperPropertyListener.applyUserProperties` when you change
+ * the wallpaper's settings. Handle a new pairing code or frame rate without a restart.
+ */
+function listenForWallpaperEngine(): void {
+  type Prop = { value?: unknown };
+  (window as unknown as { wallpaperPropertyListener: unknown }).wallpaperPropertyListener = {
+    applyUserProperties(props: Record<string, Prop | undefined>) {
+      void (async () => {
+        const code = props.paircode?.value;
+        if (typeof code === "string" && code.trim() && (await isNewPairCode(code.trim()))) {
+          if (auth.importRefreshToken(code)) return location.reload();
+        }
+        // Frame rate or style changed: reload with them in the address.
+        const url = new URL(location.href);
+        const fps = props.fps?.value;
+        if (typeof fps === "number") url.searchParams.set("fps", String(Math.round(fps)));
+        const style = props.style?.value;
+        if (typeof style === "string") url.searchParams.set("style", style);
+        if (url.search !== location.search) location.replace(url.toString());
+      })();
+    },
+  };
+}
+
 async function start(): Promise<void> {
   // Refuse to run inside another site's frame (clickjacking). See frame.ts.
   if (isFramed()) return showFramed();
@@ -800,6 +889,20 @@ async function start(): Promise<void> {
 
   const clientId = auth.getClientId();
   if (!clientId) return showSetup();
+
+  if (pairing) {
+    const r = await auth.handleRedirect(clientId, { pairing: true });
+    if (r.kind === "paired") return showPairCode(r.refreshToken);
+    return showPairStart(clientId, r.kind === "error" ? r.message : undefined);
+  }
+
+  if (wallpaper) {
+    // A pairing code handed over by the Wallpaper Engine package. Only a new code replaces the
+    // current login (see isNewPairCode).
+    const code = takePairCode();
+    if (code && (await isNewPairCode(code))) auth.importRefreshToken(code);
+    listenForWallpaperEngine();
+  }
 
   const redirect = await auth.handleRedirect(clientId);
   if (wallpaper) restoreWallpaperUrl();

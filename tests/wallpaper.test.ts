@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as auth from "../src/auth";
-import { DEFAULT_FPS, FrameCap, MAX_FPS, MIN_FPS, parseWallpaper } from "../src/wallpaper";
+import { DEFAULT_FPS, FrameCap, isNewPairCode, MAX_FPS, MIN_FPS, parsePairHash, parseWallpaper } from "../src/wallpaper";
+import { local as safeLocal } from "../src/storage";
 import { jsonResponse, MemoryStorage } from "./helpers";
 
 const CLIENT = "0123456789abcdef0123456789abcdef";
@@ -16,6 +17,11 @@ describe("wallpaper mode from the address bar", () => {
     expect(parseWallpaper("?wallpaper")).toEqual({ fps: DEFAULT_FPS });
     expect(parseWallpaper("?wallpaper=1&fps=")).toEqual({ fps: DEFAULT_FPS });
     expect(parseWallpaper("?wallpaper&fps=fast")).toEqual({ fps: DEFAULT_FPS });
+  });
+
+  it("takes a known style only", () => {
+    expect(parseWallpaper("?wallpaper&style=vinyl")).toEqual({ fps: DEFAULT_FPS, style: "vinyl" });
+    expect(parseWallpaper("?wallpaper&style=<b>")).toEqual({ fps: DEFAULT_FPS });
   });
 
   it("clamps the frame rate", () => {
@@ -81,5 +87,69 @@ describe("remembered login (wallpaper mode)", () => {
     fetchMock.mockResolvedValueOnce(jsonResponse({ error: "invalid_grant" }, 400));
     expect(await auth.getAccessToken(CLIENT)).toEqual({ kind: "logged-out" });
     expect(local.getItem("sv.wallpaper.refresh")).toBeNull();
+  });
+});
+
+const CODE = "AQD" + "x".repeat(120) + "-_9";
+
+describe("pairing codes (Wallpaper Engine)", () => {
+  let local: MemoryStorage;
+  let session: MemoryStorage;
+  const fetchMock = vi.fn();
+
+  beforeEach(() => {
+    local = new MemoryStorage();
+    session = new MemoryStorage();
+    vi.stubGlobal("localStorage", local);
+    vi.stubGlobal("sessionStorage", session);
+    vi.stubGlobal("fetch", fetchMock);
+    fetchMock.mockReset();
+    auth._resetForTests();
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("reads the code from the #fragment only", () => {
+    expect(parsePairHash("#pair=" + encodeURIComponent(CODE))).toBe(CODE);
+    expect(parsePairHash("")).toBeNull();
+    expect(parsePairHash("#pair=")).toBeNull();
+    expect(parsePairHash("#other=1")).toBeNull();
+  });
+
+  it("only accepts token-shaped codes", () => {
+    expect(auth.isValidPairCode(CODE)).toBe(true);
+    expect(auth.isValidPairCode("short")).toBe(false);
+    expect(auth.isValidPairCode(CODE + "<script>")).toBe(false);
+    expect(auth.isValidPairCode(CODE + " " + CODE)).toBe(false);
+  });
+
+  it("imports a code only in wallpaper mode", () => {
+    expect(auth.importRefreshToken(CODE)).toBe(false);
+    expect(local.dump()).toEqual({});
+    auth.setRememberLogin(true);
+    expect(auth.importRefreshToken("nope")).toBe(false);
+    expect(auth.importRefreshToken(CODE)).toBe(true);
+    expect(local.getItem("sv.wallpaper.refresh")).toBe(CODE);
+    expect(auth.isLoggedIn()).toBe(true);
+  });
+
+  it("takes each code once, so a rotated login isn't overwritten on every start", async () => {
+    expect(await isNewPairCode(CODE, safeLocal)).toBe(true);
+    expect(await isNewPairCode(CODE, safeLocal)).toBe(false);
+    expect(await isNewPairCode(CODE + "2", safeLocal)).toBe(true);
+    expect(JSON.stringify(local.dump())).not.toContain(CODE); // only a hash is kept
+  });
+
+  it("a pairing login hands the token over without saving anything", async () => {
+    session.setItem("sv.pkce.state", "s1");
+    session.setItem("sv.pkce.verifier", "v1");
+    vi.stubGlobal("window", {
+      location: { href: "http://127.0.0.1:5173/?code=c1&state=s1", origin: "http://127.0.0.1:5173" },
+      history: { replaceState: () => {} },
+    });
+    fetchMock.mockResolvedValueOnce(jsonResponse({ access_token: "a1", refresh_token: "r-pair", expires_in: 3600 }));
+    expect(await auth.handleRedirect(CLIENT, { pairing: true })).toEqual({ kind: "paired", refreshToken: "r-pair" });
+    expect(session.dump()).toEqual({});
+    expect(local.dump()).toEqual({});
+    expect(auth.isLoggedIn()).toBe(false);
   });
 });

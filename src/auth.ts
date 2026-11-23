@@ -140,13 +140,15 @@ export async function beginLogin(clientId: string): Promise<void> {
 export type RedirectResult =
   | { kind: "none" }
   | { kind: "ok" }
+  /** pairing login (see wallpaper.ts): the refresh token to hand over, not saved here */
+  | { kind: "paired"; refreshToken: string }
   | { kind: "error"; message: string };
 
 /**
  * If Spotify just sent us back with ?code=…, trade it for tokens.
  * Always strips the auth params from the address bar afterwards.
  */
-export async function handleRedirect(clientId: string): Promise<RedirectResult> {
+export async function handleRedirect(clientId: string, opts: { pairing?: boolean } = {}): Promise<RedirectResult> {
   const url = new URL(window.location.href);
   const code = url.searchParams.get("code");
   const error = url.searchParams.get("error");
@@ -184,7 +186,13 @@ export async function handleRedirect(clientId: string): Promise<RedirectResult> 
     return { kind: "error", message: "Can't reach Spotify. Check your connection and try again." };
   }
   if (!res.ok) return { kind: "error", message: await describeTokenError(res) };
-  saveTokens(tokensFromResponse(await res.json()));
+  const tokens = tokensFromResponse(await res.json());
+  if (opts.pairing) {
+    // A login made only to hand to a wallpaper: nothing is kept in this browser.
+    if (!tokens.refreshToken) return { kind: "error", message: "Spotify didn't send a pairing code. Please try again." };
+    return { kind: "paired", refreshToken: tokens.refreshToken };
+  }
+  saveTokens(tokens);
   return { kind: "ok" };
 }
 
@@ -227,6 +235,22 @@ function saveTokens(t: Tokens): void {
   memory = { accessToken: t.accessToken, expiresAt: t.expiresAt };
   const { s, key } = refreshStore();
   if (t.refreshToken) s.set(key, t.refreshToken);
+}
+
+/** Does this look like a Spotify refresh token (a pairing code)? Pure; tested. */
+export function isValidPairCode(code: string): boolean {
+  return /^[A-Za-z0-9_~.-]{40,1000}$/.test(code.trim());
+}
+
+/**
+ * Wallpaper mode only: log in with a pairing code (a refresh token made by `?pair` in a normal
+ * browser), for wallpaper apps that can't take keyboard input. Returns false if refused.
+ */
+export function importRefreshToken(code: string): boolean {
+  if (!remember || !isValidPairCode(code)) return false;
+  memory = null;
+  local.set(KEY_REFRESH_KEPT, code.trim());
+  return true;
 }
 
 /** Delete tokens that older versions left in localStorage. Safe to call any time. */
