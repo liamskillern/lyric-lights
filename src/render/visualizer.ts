@@ -51,6 +51,8 @@ export class Visualizer {
   private title: { name: string; artist: string; shownAt: number } | null = null;
 
   showLyrics = true;
+  /** lyric size multiplier (settings) */
+  lyricScale = 1;
 
   constructor(private canvas: HTMLCanvasElement) {
     this.ctx = canvas.getContext("2d", { alpha: false })!;
@@ -158,6 +160,7 @@ export class Visualizer {
         glow: s.colors.accent,
         pulse: this.pulse,
         chorus: this.chorusAmt,
+        size: this.lyricScale,
         title: this.title,
       });
     }

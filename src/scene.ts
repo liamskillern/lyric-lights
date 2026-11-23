@@ -47,6 +47,10 @@ export interface SceneInput {
   /** index of the current lyric line, -1 if none */
   lineIndex: number;
   isPlaying: boolean;
+  /** user setting, 0..1.5 (default 1) */
+  effectStrength?: number;
+  /** user setting: calmer motion, fewer effects */
+  reducedMotion?: boolean;
 }
 
 const COOL: RGB = [12, 18, 48];
@@ -56,7 +60,7 @@ export function noEffects(): Record<Effect, number> {
   return Object.fromEntries(EFFECTS.map((e) => [e, 0])) as Record<Effect, number>;
 }
 
-export function computeScene({ palette, song, lineIndex, isPlaying }: SceneInput): SceneTarget {
+export function computeScene({ palette, song, lineIndex, isPlaying, effectStrength = 1, reducedMotion = false }: SceneInput): SceneTarget {
   const songValence = song?.valence ?? 0;
   const line = song && lineIndex >= 0 ? song.lines[lineIndex] : undefined;
   // The current line nudges the mood; the whole song sets the baseline.
@@ -96,6 +100,9 @@ export function computeScene({ palette, song, lineIndex, isPlaying }: SceneInput
     effects.sparkles = Math.max(effects.sparkles, 0.35);
   }
   if (!isPlaying) for (const e of EFFECTS) effects[e] *= 0.4;
+  const strength = Math.min(1.5, Math.max(0, effectStrength)) * (reducedMotion ? 0.6 : 1);
+  for (const e of EFFECTS) effects[e] = Math.min(1, effects[e] * strength);
+  if (reducedMotion) speed *= 0.55;
 
   return {
     colors: { top, bottom, blobA, blobB, accent, text },

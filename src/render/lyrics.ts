@@ -36,6 +36,8 @@ export interface LyricFrame {
   color: RGB;
   glow: RGB;
   pulse: number;
+  /** user setting: lyric size multiplier */
+  size?: number;
   /** 0..1, eases in during the chorus: bigger text */
   chorus?: number;
   title: { name: string; artist: string; shownAt: number } | null;
@@ -46,7 +48,7 @@ export class LyricsLayer {
   private cacheKey = "";
 
   draw(ctx: CanvasRenderingContext2D, w: number, h: number, f: LyricFrame): void {
-    const base = Math.round(Math.min(Math.max(Math.min(w, h) * 0.068, 22), 76));
+    const base = Math.round(Math.min(Math.max(Math.min(w, h) * 0.068, 22), 76) * (f.size ?? 1));
     const key = `${w}x${h}`;
     if (key !== this.cacheKey) {
       this.wrapCache.clear();

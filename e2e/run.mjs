@@ -261,6 +261,50 @@ try {
     await ctx.close();
   }
 
+  // ---- 9. Settings dialog ----
+  {
+    const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+    const errors = watchErrors(page);
+    await page.goto(`${BASE}?demo`);
+    await page.waitForFunction(() => document.getElementById("np-title")?.textContent !== "");
+    await page.keyboard.press("s");
+    check(await page.isVisible("#settings[open]"), "settings: S opens the panel");
+    await page.screenshot({ path: `${OUT}settings.png` });
+    // Change a few things.
+    await page.$eval("#set-strength", (el) => {
+      el.value = "50";
+      el.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await page.selectOption("#set-lyric-size", "l");
+    await page.check("#set-reduced");
+    check((await page.textContent("#out-strength")) === "50%", "settings: strength label updates");
+    await page.keyboard.press("Escape");
+    check(!(await page.isVisible("#settings[open]")), "settings: Esc closes it");
+    check((await page.evaluate(() => document.activeElement?.id)) !== "set-strength", "settings: focus leaves the dialog");
+    // Shortcuts don't fire while it's open.
+    await page.click("#btn-settings");
+    await page.keyboard.press("l");
+    const stillOn = await page.$eval("#set-lyrics", (el) => el.checked);
+    check(stillOn, "settings: L doesn't toggle lyrics while the panel is open");
+    await page.keyboard.press("Escape");
+    // Saved across a reload.
+    await page.reload();
+    await page.waitForFunction(() => document.getElementById("np-title")?.textContent !== "");
+    const saved = await page.evaluate(() => JSON.parse(localStorage.getItem("sv.settings") ?? "{}"));
+    check(saved.effectStrength === 0.5 && saved.lyricSize === "l" && saved.reducedMotion === true, "settings: saved and reloaded");
+    await page.keyboard.press("s");
+    check((await page.$eval("#set-reduced", (el) => el.checked)) === true, "settings: form shows saved values");
+    await page.keyboard.press("Escape");
+    // Tampered storage falls back to safe values.
+    await page.evaluate(() => localStorage.setItem("sv.settings", JSON.stringify({ effectStrength: 1e9, style: "<img src=x>", lyricSize: 7 })));
+    await page.reload();
+    await page.waitForFunction(() => document.getElementById("np-title")?.textContent !== "");
+    await page.keyboard.press("s");
+    check((await page.textContent("#out-strength")) === "150%", "settings: tampered values are clamped");
+    check(errors.length === 0, `settings: no console errors ${errors.join(" | ")}`);
+    await page.close();
+  }
+
   // ---- 8. Progress bar and "Up next" near the end of a song ----
   {
     const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });

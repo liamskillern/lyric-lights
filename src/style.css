@@ -438,3 +438,136 @@ body.idle {
   content-visibility: hidden;
   visibility: hidden;
 }
+
+/* ---------- settings dialog ---------- */
+
+.settings {
+  width: min(460px, calc(100vw - 32px));
+  max-height: calc(100dvh - 32px);
+  padding: 0;
+  border: 1px solid var(--glass-border);
+  border-radius: 20px;
+  background: rgb(16 14 32 / 0.92);
+  color: var(--text);
+  box-shadow: 0 30px 80px rgb(0 0 0 / 0.5);
+}
+
+.settings::backdrop {
+  background: rgb(0 0 0 / 0.35);
+}
+
+.settings-form {
+  padding: 18px 20px 20px;
+}
+
+.settings-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.settings h2 {
+  margin: 0;
+  font-size: 20px;
+}
+
+.settings fieldset {
+  border: 0;
+  border-top: 1px solid var(--glass-border);
+  margin: 0;
+  padding: 12px 0 10px;
+  display: grid;
+  gap: 10px;
+}
+
+.settings legend {
+  font-weight: 700;
+  font-size: 14px;
+  padding: 0;
+  margin-bottom: 6px;
+}
+
+.settings kbd {
+  font: 600 11px ui-monospace, Consolas, monospace;
+  padding: 1px 5px;
+  border: 1px solid var(--glass-border);
+  border-radius: 5px;
+  color: var(--muted);
+  margin-left: 4px;
+}
+
+.range-row {
+  display: grid;
+  grid-template-columns: 90px 1fr 56px;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.range-row select {
+  grid-column: 2 / 4;
+}
+
+.check-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  font-size: 14px;
+}
+
+.settings input[type="range"] {
+  width: 100%;
+  accent-color: #9d7bff;
+}
+
+.settings input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: #9d7bff;
+}
+
+.settings select {
+  font: inherit;
+  font-size: 14px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--glass-border);
+  background: rgb(0 0 0 / 0.35);
+  color: var(--text);
+}
+
+.settings output {
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  color: var(--text);
+}
+
+.settings .fine-print {
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.seg {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.seg button {
+  font-size: 13px;
+  padding: 7px 12px;
+}
+
+.seg button[aria-pressed="true"],
+.settings-head button {
+  background: rgb(255 255 255 / 0.85);
+  color: #111;
+}
+
+#set-offset-reset {
+  justify-self: start;
+}

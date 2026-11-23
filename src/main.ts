@@ -8,7 +8,7 @@ import { analyzeSong, analyzeText, type SongMood } from "./mood";
 import { DEFAULT_PALETTE, paletteFromImage, paletteFromUrl, type Palette } from "./palette";
 import { computeScene, type SceneTarget } from "./scene";
 import { formatTime, NOTHING_PLAYING, positionAt, SpotifyPoller, type Playback, type Track } from "./spotify";
-import { local } from "./storage";
+import { LYRIC_SIZES, defaultSettings, loadSettings, parseSettings, saveSettings, type Settings } from "./settings";
 import { Visualizer } from "./render/visualizer";
 
 // ---------- DOM ----------
@@ -23,7 +23,23 @@ const thumb = $<HTMLImageElement>("thumb");
 const npTitle = $("np-title");
 const npArtist = $("np-artist");
 const npStatus = $("np-status");
-const btnLyrics = $<HTMLButtonElement>("btn-lyrics");
+const btnSettings = $<HTMLButtonElement>("btn-settings");
+const settingsDialog = $<HTMLDialogElement>("settings");
+const setStyle = $<HTMLSelectElement>("set-style");
+const setStrength = $<HTMLInputElement>("set-strength");
+const outStrength = $<HTMLOutputElement>("out-strength");
+const setReduced = $<HTMLInputElement>("set-reduced");
+const setLyrics = $<HTMLInputElement>("set-lyrics");
+const setLyricSize = $<HTMLSelectElement>("set-lyric-size");
+const setOffset = $<HTMLInputElement>("set-offset");
+const outOffset = $<HTMLOutputElement>("out-offset");
+const setOffsetReset = $<HTMLButtonElement>("set-offset-reset");
+const beatOff = $<HTMLButtonElement>("beat-off");
+const beatSystem = $<HTMLButtonElement>("beat-system");
+const beatMic = $<HTMLButtonElement>("beat-mic");
+const setSensitivity = $<HTMLInputElement>("set-sensitivity");
+const outSensitivity = $<HTMLOutputElement>("out-sensitivity");
+const setUpNext = $<HTMLInputElement>("set-upnext");
 const btnMic = $<HTMLButtonElement>("btn-mic");
 const btnFull = $<HTMLButtonElement>("btn-full");
 const btnLogout = $<HTMLButtonElement>("btn-logout");
@@ -60,9 +76,12 @@ const isDemo = new URLSearchParams(location.search).has("demo");
 const viz = new Visualizer(canvas);
 const audio = new AudioInput();
 audio.onEnded = () => {
-  btnMic.setAttribute("aria-pressed", "false");
+  refreshBeatUi();
   toast("Beat sync off (sharing stopped)");
 };
+
+const prefersReducedMotion = typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
+let settings: Settings = loadSettings(defaultSettings(prefersReducedMotion, canCaptureSystemAudio()));
 
 const state = {
   playback: NOTHING_PLAYING as Playback,
@@ -74,8 +93,6 @@ const state = {
   loadToken: 0,
   /** next song in the queue, if known */
   next: null as Track | null,
-  showUpNext: true,
-  lyricOffsetMs: Number(local.get("sv.lyricOffset") ?? 0) || 0,
 };
 
 let demo: DemoSource | null = null;
@@ -204,7 +221,7 @@ function updateProgress(now: number, pos: number): void {
   progressFill.style.transform = `scaleX(${Math.min(1, pos / t.durationMs).toFixed(4)})`;
   npTime.textContent = `${formatTime(pos)} / ${formatTime(t.durationMs)}`;
   const left = t.durationMs - pos;
-  const show = state.showUpNext && state.playback.isPlaying && left < 15_000 && !!state.next && state.next.id !== t.id;
+  const show = settings.showUpNext && state.playback.isPlaying && left < 15_000 && !!state.next && state.next.id !== t.id;
   upnext.hidden = false;
   upnext.classList.toggle("show", show);
 }
@@ -297,7 +314,7 @@ function loop(now: number): void {
 
   const pos = positionAt(state.playback, now);
   const lines = state.syncedLines;
-  const idx = lines ? lineIndexAt(lines, pos + LEAD_MS + state.lyricOffsetMs) : -1;
+  const idx = lines ? lineIndexAt(lines, pos + LEAD_MS + settings.lyricOffsetMs) : -1;
 
   // Only recompute the scene when its inputs change.
   const key = `${state.loadToken}|${idx}|${state.playback.isPlaying}|${state.song ? 1 : 0}|${state.palette === DEFAULT_PALETTE}`;
@@ -308,6 +325,8 @@ function loop(now: number): void {
       song: state.song,
       lineIndex: idx,
       isPlaying: state.playback.isPlaying,
+      effectStrength: settings.effectStrength,
+      reducedMotion: settings.reducedMotion,
     });
   }
 
@@ -317,31 +336,86 @@ function loop(now: number): void {
   requestAnimationFrame(loop);
 }
 
+// ---------- settings ----------
+
+/** Push settings into the app (and the form), then save them. */
+function applySettings(save = true): void {
+  viz.showLyrics = settings.showLyrics;
+  viz.lyricScale = LYRIC_SIZES[settings.lyricSize];
+  viz.allowFlashes = !settings.reducedMotion;
+  audio.setSensitivity(settings.beatSensitivity);
+  lastSceneKey = ""; // recompute the scene with the new strength / motion
+  syncSettingsForm();
+  if (save) saveSettings(settings);
+}
+
+function syncSettingsForm(): void {
+  setStyle.value = settings.style;
+  setStrength.value = String(Math.round(settings.effectStrength * 100));
+  outStrength.textContent = `${Math.round(settings.effectStrength * 100)}%`;
+  setReduced.checked = settings.reducedMotion;
+  setLyrics.checked = settings.showLyrics;
+  setLyricSize.value = settings.lyricSize;
+  setOffset.value = String(settings.lyricOffsetMs);
+  const sec = settings.lyricOffsetMs / 1000;
+  outOffset.textContent = sec === 0 ? "0 s" : `${sec > 0 ? "+" : ""}${sec.toFixed(1)} s`;
+  setSensitivity.value = String(Math.round(settings.beatSensitivity * 100));
+  outSensitivity.textContent = `${Math.round(settings.beatSensitivity * 100)}%`;
+  setUpNext.checked = settings.showUpNext;
+  refreshBeatUi();
+}
+
+function update(change: Partial<Settings>): void {
+  settings = parseSettings({ ...settings, ...change }, settings);
+  applySettings();
+}
+
+setStrength.addEventListener("input", () => update({ effectStrength: Number(setStrength.value) / 100 }));
+setReduced.addEventListener("change", () => update({ reducedMotion: setReduced.checked }));
+setLyrics.addEventListener("change", () => update({ showLyrics: setLyrics.checked }));
+setLyricSize.addEventListener("change", () => update({ lyricSize: setLyricSize.value as Settings["lyricSize"] }));
+setOffset.addEventListener("input", () => update({ lyricOffsetMs: Number(setOffset.value) }));
+setOffsetReset.addEventListener("click", () => update({ lyricOffsetMs: 0 }));
+setSensitivity.addEventListener("input", () => update({ beatSensitivity: Number(setSensitivity.value) / 100 }));
+setUpNext.addEventListener("change", () => update({ showUpNext: setUpNext.checked }));
+setStyle.addEventListener("change", () => update({ style: setStyle.value as Settings["style"] }));
+
+function openSettings(): void {
+  if (settingsDialog.open) return settingsDialog.close();
+  syncSettingsForm();
+  settingsDialog.showModal();
+}
+btnSettings.addEventListener("click", openSettings);
+
 // ---------- controls ----------
 
 function toggleLyrics(): void {
-  viz.showLyrics = !viz.showLyrics;
-  btnLyrics.setAttribute("aria-pressed", String(viz.showLyrics));
+  update({ showLyrics: !settings.showLyrics });
+  toast(settings.showLyrics ? "Lyrics on" : "Lyrics off");
 }
 
-/** Best beat source for this device: the computer's sound if the browser can share it, else the mic. */
-function defaultBeatSource(): AudioSource {
-  return canCaptureSystemAudio() ? "system" : "mic";
+function refreshBeatUi(): void {
+  const src = audio.active ? audio.source : null;
+  btnMic.setAttribute("aria-pressed", String(src !== null));
+  beatOff.setAttribute("aria-pressed", String(src === null));
+  beatSystem.setAttribute("aria-pressed", String(src === "system"));
+  beatMic.setAttribute("aria-pressed", String(src === "mic"));
+  beatSystem.hidden = !canCaptureSystemAudio();
 }
 
-async function toggleBeat(source: AudioSource = defaultBeatSource()): Promise<void> {
-  if (audio.active) {
-    audio.stop();
-    btnMic.setAttribute("aria-pressed", "false");
-    toast("Beat sync off");
-    return;
-  }
+function stopBeat(quiet = false): void {
+  audio.stop();
+  refreshBeatUi();
+  if (!quiet) toast("Beat sync off");
+}
+
+async function startBeat(source: AudioSource): Promise<void> {
+  if (settings.beatSource !== source) update({ beatSource: source });
   if (source === "system") {
     toast("In the share window: pick Entire screen and tick \"Also share system audio\" (or share the tab playing music).", 9000);
   }
   try {
-    await audio.start(source);
-    btnMic.setAttribute("aria-pressed", "true");
+    await audio.start(source, settings.beatSensitivity);
     toast(
       source === "system"
         ? "Beat sync on. Only the sound is used; the screen picture is thrown away right away."
@@ -349,7 +423,6 @@ async function toggleBeat(source: AudioSource = defaultBeatSource()): Promise<vo
       4500,
     );
   } catch (err) {
-    btnMic.setAttribute("aria-pressed", "false");
     if (err instanceof NoAudioSharedError) {
       toast("No sound was shared. Try again and tick \"Also share system audio\" (Chrome or Edge on a computer).", 7000);
     } else if ((err as Error).name === "NotAllowedError") {
@@ -358,7 +431,18 @@ async function toggleBeat(source: AudioSource = defaultBeatSource()): Promise<vo
       toast(source === "system" ? "This browser can't share its sound. Try the microphone instead." : "Couldn't use the microphone.", 5000);
     }
   }
+  refreshBeatUi();
 }
+
+/** The Beat button / B key: off if on, otherwise start with the preferred source. */
+async function toggleBeat(source: AudioSource = settings.beatSource): Promise<void> {
+  if (audio.active) return stopBeat();
+  await startBeat(source);
+}
+
+beatOff.addEventListener("click", () => audio.active && stopBeat());
+beatSystem.addEventListener("click", () => audio.source !== "system" && void startBeat("system"));
+beatMic.addEventListener("click", () => audio.source !== "mic" && void startBeat("mic"));
 
 async function toggleFullscreen(): Promise<void> {
   try {
@@ -370,34 +454,36 @@ async function toggleFullscreen(): Promise<void> {
 }
 
 function nudgeLyrics(deltaMs: number): void {
-  state.lyricOffsetMs = Math.max(-3000, Math.min(3000, state.lyricOffsetMs + deltaMs));
-  local.set("sv.lyricOffset", String(state.lyricOffsetMs));
-  const s = (state.lyricOffsetMs / 1000).toFixed(1);
-  toast(state.lyricOffsetMs === 0 ? "Lyric timing: normal" : `Lyric timing: ${state.lyricOffsetMs > 0 ? "+" : ""}${s}s earlier`);
+  update({ lyricOffsetMs: settings.lyricOffsetMs + deltaMs });
+  const s = (settings.lyricOffsetMs / 1000).toFixed(1);
+  toast(settings.lyricOffsetMs === 0 ? "Lyric timing: normal" : `Lyric timing: ${settings.lyricOffsetMs > 0 ? "+" : ""}${s}s earlier`);
 }
 
-btnLyrics.addEventListener("click", toggleLyrics);
 btnMic.addEventListener("click", () => void toggleBeat());
 btnFull.addEventListener("click", () => void toggleFullscreen());
 btnLogout.addEventListener("click", () => {
   poller?.stop();
-  audio.stop();
+  stopBeat(true);
   void wakeLock?.release();
   auth.logout();
   showLogin(undefined, true);
 });
 
 window.addEventListener("keydown", (e) => {
-  if (!panel.hidden || e.ctrlKey || e.metaKey || e.altKey) return;
+  // Shortcuts are off on the login screen and while the settings dialog is open.
+  if (!panel.hidden || settingsDialog.open || e.ctrlKey || e.metaKey || e.altKey) return;
   const k = e.key.toLowerCase();
   if (k === "l") toggleLyrics();
+  else if (k === "s") openSettings();
   else if (k === "b") void toggleBeat();
   else if (k === "m") void toggleBeat("mic");
   else if (k === "f") void toggleFullscreen();
   else if (k === "]") nudgeLyrics(100);
   else if (k === "[") nudgeLyrics(-100);
-  else if (k === "0") nudgeLyrics(-state.lyricOffsetMs);
+  else if (k === "0") nudgeLyrics(-settings.lyricOffsetMs);
 });
+
+applySettings(false);
 
 // Hide the controls and cursor when the mouse is still.
 let idleTimer = 0;

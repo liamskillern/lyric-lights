@@ -28,8 +28,8 @@
         </div>
       </div>
       <nav class="controls" aria-label="Visualizer controls">
-        <button id="btn-lyrics" type="button" aria-pressed="true" title="Show or hide lyrics (L)">Lyrics</button>
         <button id="btn-mic" type="button" aria-pressed="false" title="Pulse to the beat using this computer's sound, or the mic on phones (B)">Beat</button>
+        <button id="btn-settings" type="button" aria-haspopup="dialog" title="Settings (S)">Settings</button>
         <button id="btn-full" type="button" title="Full screen (F)">Full screen</button>
         <button id="btn-logout" type="button" title="Disconnect Spotify">Log out</button>
       </nav>
@@ -45,6 +45,65 @@
     </aside>
 
     <div id="progress" class="progress" hidden><div id="progress-fill" class="progress-fill"></div></div>
+
+    <dialog id="settings" class="settings" aria-labelledby="settings-title">
+      <form method="dialog" class="settings-form">
+        <header class="settings-head">
+          <h2 id="settings-title">Settings</h2>
+          <button value="close" class="small" type="submit" aria-label="Close settings">Done</button>
+        </header>
+
+        <fieldset id="style-field" hidden>
+          <legend>Visual style <kbd>V</kbd></legend>
+          <select id="set-style" aria-label="Visual style"></select>
+        </fieldset>
+
+        <fieldset>
+          <legend>Effects</legend>
+          <label class="range-row">Strength
+            <input id="set-strength" type="range" min="0" max="150" step="10" />
+            <output id="out-strength"></output>
+          </label>
+          <label class="check-row"><input id="set-reduced" type="checkbox" /> Reduced motion (slower, fewer particles, no flashes)</label>
+        </fieldset>
+
+        <fieldset>
+          <legend>Lyrics</legend>
+          <label class="check-row"><input id="set-lyrics" type="checkbox" /> Show lyrics <kbd>L</kbd></label>
+          <label class="range-row">Size
+            <select id="set-lyric-size">
+              <option value="s">Small</option>
+              <option value="m">Medium</option>
+              <option value="l">Large</option>
+            </select>
+          </label>
+          <label class="range-row">Timing
+            <input id="set-offset" type="range" min="-3000" max="3000" step="100" />
+            <output id="out-offset"></output>
+          </label>
+          <button id="set-offset-reset" class="small" type="button">Reset timing</button>
+        </fieldset>
+
+        <fieldset>
+          <legend>Beat sync <kbd>B</kbd></legend>
+          <div class="seg" role="group" aria-label="Beat sync source">
+            <button id="beat-off" type="button" aria-pressed="true">Off</button>
+            <button id="beat-system" type="button" aria-pressed="false">Computer sound</button>
+            <button id="beat-mic" type="button" aria-pressed="false">Microphone</button>
+          </div>
+          <label class="range-row">Sensitivity
+            <input id="set-sensitivity" type="range" min="0" max="100" step="5" />
+            <output id="out-sensitivity"></output>
+          </label>
+          <p class="fine-print">Computer sound works in Chrome or Edge on a computer: share your screen and tick "Also share system audio". Only the sound is used.</p>
+        </fieldset>
+
+        <fieldset>
+          <legend>Extras</legend>
+          <label class="check-row"><input id="set-upnext" type="checkbox" /> Show "Up next" at the end of songs</label>
+        </fieldset>
+      </form>
+    </dialog>
 
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
