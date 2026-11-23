@@ -8,6 +8,7 @@ import type { VisualStyle } from "../settings";
 import { blurArt } from "./background";
 import { FONTS, type FontSpec } from "../fonts";
 import { drawIdle } from "./idle";
+import { calmAnim, type LyricAnim } from "./lyricAnim";
 import { LYRICS_Y, STYLE_DRAW } from "./styles";
 import { Effects } from "./effects";
 import { LyricsLayer } from "./lyrics";
@@ -22,6 +23,8 @@ export interface FrameInput {
   level: number;
   /** bass / mid / treble 0..1 (all 0 when beat sync is off) */
   bands?: Bands;
+  /** position in the song (ms), for word-by-word lyric timing */
+  songMs?: number;
   /** heard tempo, for slow swells once per bar */
   tempo?: { bpm: number; lastBeatAt: number } | null;
 }
@@ -65,6 +68,10 @@ export class Visualizer {
   private image: CanvasImageSource | null = null;
   /** lyric font (settings, or picked per song by Auto) */
   font: FontSpec = FONTS.modern;
+  /** how lyric lines arrive and leave (settings) */
+  lyricAnim: LyricAnim = "rise";
+  /** three-line sing-along layout (settings) */
+  karaoke = false;
   /** lyric size multiplier (settings) */
   lyricScale = 1;
 
@@ -187,6 +194,9 @@ export class Visualizer {
         size: this.lyricScale * (style === "vinyl" ? 0.8 : 1),
         centerY: LYRICS_Y[style],
         font: this.font,
+        anim: calmAnim(this.lyricAnim, !this.allowFlashes),
+        karaoke: this.karaoke,
+        songMs: input.songMs,
         title: this.title,
       });
     }

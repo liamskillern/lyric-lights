@@ -3,6 +3,7 @@
 // range falls back to the default, so a broken or tampered value can't break the app.
 
 import { FONT_CHOICES, type FontChoice } from "./fonts";
+import { LYRIC_ANIMS, type LyricAnim } from "./render/lyricAnim";
 import { local } from "./storage";
 
 export const STYLES = ["glow", "aurora", "vinyl", "tunnel"] as const;
@@ -25,6 +26,10 @@ export interface Settings {
   /** lyric font, or "auto" to pick per song */
   font: FontChoice;
   lyricSize: LyricSize;
+  /** how lines arrive and leave */
+  lyricAnim: LyricAnim;
+  /** three-line sing-along layout */
+  karaoke: boolean;
   /** shift lyrics earlier (+) or later (−), -3000..3000 ms */
   lyricOffsetMs: number;
   /** which source the Beat button uses */
@@ -48,6 +53,8 @@ export function defaultSettings(prefersReducedMotion = false, canShareSystemAudi
     showLyrics: true,
     font: "modern",
     lyricSize: "m",
+    lyricAnim: "rise",
+    karaoke: false,
     lyricOffsetMs: 0,
     beatSource: canShareSystemAudio ? "system" : "mic",
     beatSensitivity: 0.5,
@@ -72,6 +79,8 @@ export function parseSettings(raw: unknown, defaults: Settings): Settings {
     showLyrics: bool(r.showLyrics, defaults.showLyrics),
     font: oneOf(r.font, FONT_CHOICES, defaults.font),
     lyricSize: oneOf(r.lyricSize, Object.keys(LYRIC_SIZES) as LyricSize[], defaults.lyricSize),
+    lyricAnim: oneOf(r.lyricAnim, LYRIC_ANIMS, defaults.lyricAnim),
+    karaoke: bool(r.karaoke, defaults.karaoke),
     lyricOffsetMs: Math.round(num(r.lyricOffsetMs, -3000, 3000, defaults.lyricOffsetMs)),
     beatSource: oneOf(r.beatSource, ["system", "mic"] as const, defaults.beatSource),
     beatSensitivity: num(r.beatSensitivity, 0, 1, defaults.beatSensitivity),

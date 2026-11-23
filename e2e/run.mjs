@@ -301,6 +301,36 @@ try {
     await ctx.close();
   }
 
+  // ---- 13. Lyric animations (A) and karaoke mode (K) ----
+  {
+    const page = await browser.newPage({ viewport: { width: 1280, height: 800 }, deviceScaleFactor: 1 });
+    const errors = watchErrors(page);
+    await page.goto(`${BASE}?demo`);
+    for (const anim of ["rise", "fade", "pop", "slide", "typewriter", "karaoke"]) {
+      await page.evaluate((a) => localStorage.setItem("sv.settings", JSON.stringify({ lyricAnim: a })), anim);
+      await page.reload();
+      await page.waitForTimeout(7_650); // just after the 7.5 s line change: mid-animation
+      await page.screenshot({ path: `${OUT}anim-${anim}.png` });
+    }
+    // A cycles from karaoke back to rise.
+    await page.keyboard.press("a");
+    const a = await page.evaluate(() => JSON.parse(localStorage.getItem("sv.settings") ?? "{}").lyricAnim);
+    check(a === "rise", `animations: A cycles and saves (${a})`);
+
+    // Karaoke mode: countdown before the first line, then words filling.
+    await page.evaluate(() => localStorage.setItem("sv.settings", JSON.stringify({ karaoke: true })));
+    await page.reload();
+    await page.waitForTimeout(1_400);
+    await page.screenshot({ path: `${OUT}karaoke-countdown.png` });
+    await page.waitForTimeout(3_400); // ~4.8 s: first line part-way sung
+    await page.screenshot({ path: `${OUT}karaoke.png` });
+    await page.keyboard.press("k");
+    const k = await page.evaluate(() => JSON.parse(localStorage.getItem("sv.settings") ?? "{}").karaoke);
+    check(k === false, "karaoke: K toggles it off and saves");
+    check(errors.length === 0, `animations: no console errors ${errors.join(" | ")}`);
+    await page.close();
+  }
+
   // ---- 12. Lyric fonts (T) ----
   {
     const page = await browser.newPage({ viewport: { width: 1280, height: 800 }, deviceScaleFactor: 1 });

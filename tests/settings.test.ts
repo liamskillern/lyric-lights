@@ -65,3 +65,10 @@ describe("loadSettings / saveSettings", () => {
     expect(local.getItem("sv.lyricOffset")).toBeNull();
   });
 });
+
+describe("lyric animation settings", () => {
+  it("validates animation and karaoke", () => {
+    expect(parseSettings({ lyricAnim: "pop", karaoke: true }, D)).toMatchObject({ lyricAnim: "pop", karaoke: true });
+    expect(parseSettings({ lyricAnim: "explode", karaoke: "yes" }, D)).toMatchObject({ lyricAnim: "rise", karaoke: false });
+  });
+});

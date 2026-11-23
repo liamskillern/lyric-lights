@@ -10,6 +10,7 @@ import { computeScene, type SceneTarget } from "./scene";
 import { formatTime, NOTHING_PLAYING, positionAt, SpotifyPoller, type Playback, type Track } from "./spotify";
 import { LYRIC_SIZES, STYLE_NAMES, STYLES, defaultSettings, loadSettings, parseSettings, saveSettings, type Settings } from "./settings";
 import { shouldIdle } from "./render/idle";
+import { LYRIC_ANIM_NAMES, LYRIC_ANIMS, type LyricAnim } from "./render/lyricAnim";
 import { FONT_CHOICES, FONTS, loadFont, resolveFont, type FontChoice } from "./fonts";
 import { estimateTempoFromLyrics, GUESS_CONFIDENCE, gridBeat, type TempoGuess } from "./tempo";
 import { Visualizer } from "./render/visualizer";
@@ -45,6 +46,8 @@ const outSensitivity = $<HTMLOutputElement>("out-sensitivity");
 const setUpNext = $<HTMLInputElement>("set-upnext");
 const setGuessedPulse = $<HTMLInputElement>("set-guessed-pulse");
 const setFont = $<HTMLSelectElement>("set-font");
+const setAnim = $<HTMLSelectElement>("set-anim");
+const setKaraoke = $<HTMLInputElement>("set-karaoke");
 const btnMic = $<HTMLButtonElement>("btn-mic");
 const btnFull = $<HTMLButtonElement>("btn-full");
 const btnLogout = $<HTMLButtonElement>("btn-logout");
@@ -360,7 +363,8 @@ function loop(now: number): void {
       song: idle ? null : state.song,
       lineIndex: idle ? -1 : idx,
       isPlaying: idle ? false : state.playback.isPlaying,
-      effectStrength: settings.effectStrength,
+      // Karaoke mode turns effects down so the words stay easy to read.
+      effectStrength: settings.effectStrength * (settings.karaoke ? 0.5 : 1),
       bpm: idle ? null : (tempo?.bpm ?? null),
       reducedMotion: settings.reducedMotion,
     });
@@ -386,6 +390,7 @@ function loop(now: number): void {
     target: lastScene,
     lyrics: lines,
     lineIndex: idx,
+    songMs: pos + LEAD_MS + settings.lyricOffsetMs,
     beat,
     level,
     bands: audio.bands,
@@ -400,6 +405,8 @@ function loop(now: number): void {
 function applySettings(save = true): void {
   viz.showLyrics = settings.showLyrics;
   viz.style = settings.style;
+  viz.lyricAnim = settings.lyricAnim;
+  viz.karaoke = settings.karaoke;
   refreshFont();
   viz.lyricScale = LYRIC_SIZES[settings.lyricSize];
   viz.allowFlashes = !settings.reducedMotion;
@@ -424,6 +431,8 @@ function syncSettingsForm(): void {
   setUpNext.checked = settings.showUpNext;
   setGuessedPulse.checked = settings.guessedPulse;
   setFont.value = settings.font;
+  setAnim.value = settings.lyricAnim;
+  setKaraoke.checked = settings.karaoke;
   refreshBeatUi();
 }
 
@@ -440,6 +449,8 @@ setOffset.addEventListener("input", () => update({ lyricOffsetMs: Number(setOffs
 setOffsetReset.addEventListener("click", () => update({ lyricOffsetMs: 0 }));
 setSensitivity.addEventListener("input", () => update({ beatSensitivity: Number(setSensitivity.value) / 100 }));
 setUpNext.addEventListener("change", () => update({ showUpNext: setUpNext.checked }));
+setAnim.addEventListener("change", () => update({ lyricAnim: setAnim.value as LyricAnim }));
+setKaraoke.addEventListener("change", () => update({ karaoke: setKaraoke.checked }));
 setFont.addEventListener("change", () => update({ font: setFont.value as FontChoice }));
 setGuessedPulse.addEventListener("change", () => update({ guessedPulse: setGuessedPulse.checked }));
 setStyle.addEventListener("change", () => update({ style: setStyle.value as Settings["style"] }));
@@ -455,6 +466,19 @@ function refreshFont(): void {
   const key = resolveFont(settings.font, state.song, currentTempo()?.bpm ?? null);
   loadFont(key);
   viz.font = FONTS[key];
+}
+
+for (const a of LYRIC_ANIMS) setAnim.append(h("option", { value: a }, LYRIC_ANIM_NAMES[a]));
+
+function cycleAnim(): void {
+  const next = LYRIC_ANIMS[(LYRIC_ANIMS.indexOf(settings.lyricAnim) + 1) % LYRIC_ANIMS.length];
+  update({ lyricAnim: next });
+  toast(`Lyric animation: ${LYRIC_ANIM_NAMES[next]}${settings.reducedMotion && ["rise", "pop", "slide"].includes(next) ? " (fades while reduced motion is on)" : ""}`, 1800);
+}
+
+function toggleKaraoke(): void {
+  update({ karaoke: !settings.karaoke });
+  toast(settings.karaoke ? "Karaoke mode on" : "Karaoke mode off", 1500);
 }
 
 function cycleFont(): void {
@@ -567,6 +591,8 @@ window.addEventListener("keydown", (e) => {
   else if (k === "s") openSettings();
   else if (k === "v") cycleStyle();
   else if (k === "t") cycleFont();
+  else if (k === "a") cycleAnim();
+  else if (k === "k") toggleKaraoke();
   else if (k === "b") void toggleBeat();
   else if (k === "m") void toggleBeat("mic");
   else if (k === "f") void toggleFullscreen();

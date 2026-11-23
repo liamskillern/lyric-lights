@@ -8,6 +8,27 @@ export interface LyricLine {
   /** when the line starts, in ms from the start of the song */
   timeMs: number;
   text: string;
+  /** per-word start times, only when the lyrics have them (enhanced LRC) */
+  words?: { text: string; atMs: number }[];
+}
+
+const WORD_TAG = /<(\d{1,3}):(\d{1,2})(?:[.:](\d{1,3}))?>([^<]*)/g;
+
+/** Word timings from an enhanced-LRC line body, relative to `lineStart`; null if none or inconsistent. */
+export function parseWordTimes(body: string, text: string, lineStart: number, offsetMs: number): { text: string; relMs: number }[] | null {
+  if (!body.includes("<")) return null;
+  const out: { text: string; relMs: number }[] = [];
+  WORD_TAG.lastIndex = 0;
+  let m: RegExpExecArray | null;
+  while ((m = WORD_TAG.exec(body))) {
+    const [, mm, ss, frac = "0", seg] = m;
+    const at = Number(mm) * 60_000 + Number(ss) * 1000 + Number(frac.padEnd(3, "0").slice(0, 3)) - offsetMs;
+    for (const word of seg.trim().split(/\s+/).filter(Boolean)) out.push({ text: word, relMs: Math.max(0, at - lineStart) });
+  }
+  // Only trust them if they cover exactly the words of the line.
+  const textWords = text.split(/\s+/).filter(Boolean);
+  if (!out.length || out.length !== textWords.length) return null;
+  return out;
 }
 
 export type Lyrics =
@@ -59,10 +80,17 @@ export function parseLrc(lrc: string): LyricLine[] {
       lastEnd = TIMESTAMP.lastIndex;
     }
     if (!stamps.length) continue;
-    // Strip word-level "<mm:ss.xx>" tags from enhanced LRC.
-    let text = raw.slice(lastEnd).replace(/<\d{1,3}:\d{1,2}(?:[.:]\d{1,3})?>/g, "").trim();
-    if (text.length > LIMITS.lineChars) text = text.slice(0, LIMITS.lineChars - 1) + "…";
-    for (const t of stamps) out.push({ timeMs: Math.max(0, t), text });
+    // Word-level "<mm:ss.xx>" tags (enhanced LRC) become word timings, then are stripped from the text.
+    const body = raw.slice(lastEnd);
+    let text = body.replace(/<\d{1,3}:\d{1,2}(?:[.:]\d{1,3})?>/g, "").replace(/\s+/g, " ").trim();
+    const truncated = text.length > LIMITS.lineChars;
+    if (truncated) text = text.slice(0, LIMITS.lineChars - 1) + "…";
+    const rel = truncated ? null : parseWordTimes(body, text, stamps[0], offsetMs);
+    for (const t of stamps) {
+      const line: LyricLine = { timeMs: Math.max(0, t), text };
+      if (rel) line.words = rel.map((w) => ({ text: w.text, atMs: Math.max(0, t) + w.relMs }));
+      out.push(line);
+    }
   }
 
   return out.slice(0, LIMITS.lines).sort((a, b) => a.timeMs - b.timeMs);
