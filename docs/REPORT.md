@@ -76,6 +76,9 @@ Then open http://127.0.0.1:5173/. Use `127.0.0.1`, not `localhost`: Spotify reje
 ![Chorus moment](img/chorus.jpg)
 *A chorus moment: more effects, brighter, bigger text.*
 
+![Idle screen](img/idle.jpg)
+*The idle screen when nothing is playing.*
+
 ### Music sync
 | Feature | What it does |
 |---|---|
@@ -103,8 +106,14 @@ Then open http://127.0.0.1:5173/. Use `127.0.0.1`, not `localhost`: Spotify reje
 | **Animations** (`A`) | How each new line arrives: Rise, Fade, Pop, Slide, Typewriter, Karaoke words. |
 | **Karaoke mode** (`K`) | Three lines at once, each word filling with color as it's sung, countdown dots (● ● ●) before you need to come in, and a darker background so the words stay readable. Uses real word timings when the lyrics include them. |
 
+![Karaoke countdown](img/karaoke-countdown.jpg)
+*Karaoke mode before the first line: the countdown dots.*
+
 ![Karaoke mode](img/karaoke.jpg)
 *Karaoke mode: the current line fills word by word; the next two lines wait below.*
+
+![Lyric animations](img/animations.jpg)
+*Lyric animations (left to right, top to bottom): Rise, Fade, Pop, Slide, Typewriter mid-reveal, Karaoke words mid-fill.*
 
 ![Fonts](img/fonts.jpg)
 *The six fonts: Modern, Poster, Elegant, Marker, Retro, Mono.*
