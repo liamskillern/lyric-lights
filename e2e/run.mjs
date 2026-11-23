@@ -261,6 +261,44 @@ try {
     await ctx.close();
   }
 
+  // ---- 11. Idle screensaver when nothing is playing ----
+  {
+    const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+    await ctx.addInitScript(() => {
+      localStorage.setItem("sv.clientId", "0123456789abcdef0123456789abcdef");
+      sessionStorage.setItem("sv.refresh", "r");
+    });
+    await ctx.route("https://accounts.spotify.com/api/token", (r) =>
+      r.fulfill({ status: 200, contentType: "application/json", headers: { "access-control-allow-origin": "*" }, body: JSON.stringify({ access_token: "a", expires_in: 3600 }) }),
+    );
+    await ctx.route("https://lrclib.net/**", (r) => r.fulfill({ status: 200, contentType: "application/json", headers: { "access-control-allow-origin": "*" }, body: "[]" }));
+    let playing = false;
+    await ctx.route("https://api.spotify.com/**", (route) => {
+      if (route.request().url().includes("/queue")) return route.fulfill({ status: 200, contentType: "application/json", headers: { "access-control-allow-origin": "*" }, body: "{}" });
+      if (!playing) return route.fulfill({ status: 204, headers: { "access-control-allow-origin": "*" }, body: "" });
+      route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        headers: { "access-control-allow-origin": "*" },
+        body: JSON.stringify({ is_playing: true, progress_ms: 1000, currently_playing_type: "track", item: { type: "track", id: "w", name: "Wake Up Song", duration_ms: 200000, artists: [{ name: "Someone" }], album: { name: "A", images: [] } } }),
+      });
+    });
+    const page = await ctx.newPage();
+    const errors = watchErrors(page);
+    await page.goto(BASE);
+    await page.waitForFunction(() => document.getElementById("np-title")?.textContent === "Nothing playing");
+    await page.waitForTimeout(2500);
+    check(await page.isHidden("#hint"), "idle: text hint replaced by the idle screen");
+    const st = await canvasStats(page);
+    check(st.max > 150, `idle: clock drawn (max ${st.max.toFixed(0)})`);
+    await page.screenshot({ path: `${OUT}idle.png` });
+    playing = true;
+    await page.waitForFunction(() => document.getElementById("np-title")?.textContent === "Wake Up Song", null, { timeout: 8000 });
+    check(true, "idle: wakes up when music starts");
+    check(errors.length === 0, `idle: no console errors ${errors.join(" | ")}`);
+    await ctx.close();
+  }
+
   // ---- 10. Visual styles (V) ----
   {
     const page = await browser.newPage({ viewport: { width: 1280, height: 800 }, deviceScaleFactor: 1 });

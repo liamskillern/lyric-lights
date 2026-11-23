@@ -6,6 +6,7 @@ import type { LyricLine } from "../lyrics";
 import { EFFECTS, noEffects, type Effect, type SceneColors, type SceneTarget } from "../scene";
 import type { VisualStyle } from "../settings";
 import { blurArt } from "./background";
+import { drawIdle } from "./idle";
 import { LYRICS_Y, STYLE_DRAW } from "./styles";
 import { Effects } from "./effects";
 import { LyricsLayer } from "./lyrics";
@@ -54,6 +55,10 @@ export class Visualizer {
 
   showLyrics = true;
   style: VisualStyle = "glow";
+  /** show the screensaver (set by the app when nothing is playing) */
+  idle = false;
+  idleHint = "Play something on Spotify";
+  private idleAmt = 0;
   private image: CanvasImageSource | null = null;
   /** lyric size multiplier (settings) */
   lyricScale = 1;
@@ -140,10 +145,12 @@ export class Visualizer {
       this.indexChangedAt = now;
     }
 
+    this.idleAmt = lerp(this.idleAmt, this.idle ? 1 : 0, 1 - Math.exp(-dt * 1.5));
     this.effects.update(dt, s.speed, s.effects, s.colors);
 
     const ctx = this.ctx;
-    STYLE_DRAW[this.style](ctx, this.w, this.h, {
+    const style: VisualStyle = this.idle ? "aurora" : this.style;
+    STYLE_DRAW[style](ctx, this.w, this.h, {
       colors: s.colors,
       brightness: s.brightness,
       pulse: this.pulse,
@@ -158,7 +165,9 @@ export class Visualizer {
     });
     this.effects.draw(ctx, s.effects, s.colors, now / 1000, s.brightness * (1 + this.bands.mid * 0.25), this.bands.treble);
 
-    if (this.showLyrics) {
+    drawIdle(ctx, this.w, this.h, now, s.colors.text, s.colors.accent, this.idleAmt, this.idleHint);
+
+    if (this.showLyrics && !this.idle) {
       this.lyricsLayer.draw(ctx, this.w, this.h, {
         lines: input.lyrics,
         index: input.lineIndex,
@@ -168,8 +177,8 @@ export class Visualizer {
         glow: s.colors.accent,
         pulse: this.pulse,
         chorus: this.chorusAmt,
-        size: this.lyricScale * (this.style === "vinyl" ? 0.8 : 1),
-        centerY: LYRICS_Y[this.style],
+        size: this.lyricScale * (style === "vinyl" ? 0.8 : 1),
+        centerY: LYRICS_Y[style],
         title: this.title,
       });
     }

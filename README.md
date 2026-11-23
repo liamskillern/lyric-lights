@@ -6,7 +6,12 @@ A live visualizer for whatever you're playing on Spotify. Play a song on any dev
 - **Lyrics → imagery.** Time-synced lyrics come from [LRCLIB](https://lrclib.net). Each line is scanned for themes: rain, fire, night, snow, gold, love, city, nature. Those themes switch on matching effects (rain streaks, rising embers, stars, snow, sparkles, soft glow, neon streaks, petals) at the moment the line is sung.
 - **Lyric mood → tone.** Each line gets a sentiment score (AFINN word list). Happy songs are warmer and brighter, sad ones cooler and darker.
 - **Lyric speed → motion.** Words per minute, measured from the lyric timestamps, sets how fast everything moves. Fast rap moves; ballads drift.
-- **Beat → pulse (optional).** Spotify's audio is DRM-protected, so the page can't read it. With the mic on, it listens to the music in the room and pulses on the kick drum.
+- **Beat → pulse (optional).** Spotify's audio is DRM-protected, so the page can't read it directly. In Chrome or Edge on a computer it can listen to the **computer's sound** through the screen-share prompt ("Also share system audio"; the picture is thrown away). On phones it uses the mic. Bass, mids and treble drive the glow, brightness and sparkle; flashes are capped at 3 per second (WCAG 2.3.1).
+- **Chorus moments.** Repeated lyric lines are detected as the chorus. Choruses get brighter, faster and bigger, with a sparkle burst when they start.
+- **Four styles** (`V`): Glow, Aurora, Vinyl (the cover as a spinning record) and Tunnel.
+- **Up next + progress.** A progress line, the time, and an "Up next" card from your Spotify queue near the end of each song.
+- **Idle screensaver.** When nothing's playing: calm aurora light with a slowly drifting clock (no burn-in).
+- **Settings** (`S`): style, effect strength, reduced motion, lyric size and timing, beat source and sensitivity.
 
 ![Lyric Lights showing a rain lyric](docs/preview.png)
 
@@ -37,8 +42,10 @@ There is no backend. The page logs in with **Authorization Code + PKCE**, so it 
 | `src/palette.ts` | Median-cut quantizer and palette roles (vibrant, secondary, dark, light) |
 | `src/mood.ts` | Line sentiment, theme keywords, words per minute |
 | `src/scene.ts` | Maps everything to colors, speed, brightness and effect levels |
-| `src/audio.ts` | Optional mic beat detector |
-| `src/render/` | Background, particle effects, lyric typography |
+| `src/audio.ts` | Beat detection and bass/mid/treble from computer sound or the mic, flash limiter |
+| `src/settings.ts` | Settings with validation (stored values are untrusted) |
+| `src/render/styles/` | The four visual styles |
+| `src/render/` | Particle effects, lyric typography, idle screen |
 
 ## Security and privacy
 
@@ -49,7 +56,7 @@ There is no backend. The page logs in with **Authorization Code + PKCE**, so it 
 - **Content-Security-Policy** (production build): scripts and styles only from this site, no inline styles, network calls only to Spotify and LRCLIB, images only from Spotify's CDNs, no frames or workers.
 - **Untrusted data:** song titles, lyrics and login error codes are never inserted as HTML. Unknown `?error=` values get a fixed message, so a crafted link can't put its own words on the page. LRCLIB responses are type-checked and capped (1 MB response, 2,000 lines, 300 characters per line).
 - **Supply chain:** GitHub Actions are pinned to commit hashes, the checkout doesn't leave the token on disk, and Dependabot proposes weekly updates.
-- **Mic:** audio is analyzed live in the browser and never recorded or sent anywhere.
+- **Audio:** computer sound or mic audio is analyzed live in the browser and never recorded or sent anywhere. With computer sound, the screen picture the browser hands over is stopped immediately and never drawn.
 - **Revoking access:** "Log out" clears the tab. To cut the app off from your Spotify account completely, remove it at [spotify.com/account/apps](https://www.spotify.com/account/apps/).
 
 ## Run it yourself
@@ -66,7 +73,7 @@ npm run dev
 
 Open http://127.0.0.1:5173/ and paste your Client ID when asked, or put it in `.env` as `VITE_SPOTIFY_CLIENT_ID` (see `.env.example`). The Client ID isn't a secret.
 
-**Keys:** `L` lyrics on/off · `M` beat mic · `F` full screen · `[` / `]` nudge lyric timing (useful with Bluetooth delay) · `0` reset timing.
+**Keys:** `B` beat sync · `M` beat from the mic · `V` next style · `S` settings · `L` lyrics on/off · `F` full screen · `[` / `]` nudge lyric timing (useful with Bluetooth delay) · `0` reset timing.
 
 ## Tests
 

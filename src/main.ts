@@ -9,6 +9,7 @@ import { DEFAULT_PALETTE, paletteFromImage, paletteFromUrl, type Palette } from 
 import { computeScene, type SceneTarget } from "./scene";
 import { formatTime, NOTHING_PLAYING, positionAt, SpotifyPoller, type Playback, type Track } from "./spotify";
 import { LYRIC_SIZES, STYLE_NAMES, STYLES, defaultSettings, loadSettings, parseSettings, saveSettings, type Settings } from "./settings";
+import { shouldIdle } from "./render/idle";
 import { Visualizer } from "./render/visualizer";
 
 // ---------- DOM ----------
@@ -85,12 +86,17 @@ let settings: Settings = loadSettings(defaultSettings(prefersReducedMotion, canC
 
 const state = {
   playback: NOTHING_PLAYING as Playback,
-  trackId: null as string | null,
+  /** undefined until the first answer, so "nothing playing" at startup still updates the card */
+  trackId: undefined as string | null | undefined,
   lyrics: { kind: "none" } as Lyrics,
   syncedLines: null as LyricLine[] | null,
   song: null as SongMood | null,
   palette: DEFAULT_PALETTE as Palette,
   loadToken: 0,
+  /** performance.now() when music was last playing */
+  lastPlayingAt: 0,
+  /** at least one answer from Spotify so far */
+  gotPlayback: false,
   /** next song in the queue, if known */
   next: null as Track | null,
 };
@@ -191,8 +197,10 @@ function onPlayback(p: Playback): void {
   state.playback = p;
   const id = p.track?.id ?? null;
   if (id !== state.trackId) void onTrackChange(p.track);
-  hint.hidden = p.track !== null;
-  if (!p.track) hint.textContent = "Play something on Spotify (your phone, computer, anywhere) and it'll show up here.";
+  if (p.isPlaying) state.lastPlayingAt = performance.now();
+  state.gotPlayback = true;
+  // From here on, the idle screen (clock) says when nothing is playing.
+  hint.hidden = true;
 }
 
 function setNext(next: Track | null): void {
@@ -316,15 +324,18 @@ function loop(now: number): void {
   const lines = state.syncedLines;
   const idx = lines ? lineIndexAt(lines, pos + LEAD_MS + settings.lyricOffsetMs) : -1;
 
+  const idle = !demo && state.gotPlayback && shouldIdle(!!state.playback.track, state.playback.isPlaying, state.lastPlayingAt, now);
+  viz.idle = idle;
+
   // Only recompute the scene when its inputs change.
-  const key = `${state.loadToken}|${idx}|${state.playback.isPlaying}|${state.song ? 1 : 0}|${state.palette === DEFAULT_PALETTE}`;
+  const key = `${state.loadToken}|${idx}|${state.playback.isPlaying}|${state.song ? 1 : 0}|${state.palette === DEFAULT_PALETTE}|${idle}`;
   if (key !== lastSceneKey || !lastScene) {
     lastSceneKey = key;
     lastScene = computeScene({
       palette: state.palette,
-      song: state.song,
-      lineIndex: idx,
-      isPlaying: state.playback.isPlaying,
+      song: idle ? null : state.song,
+      lineIndex: idle ? -1 : idx,
+      isPlaying: idle ? false : state.playback.isPlaying,
       effectStrength: settings.effectStrength,
       reducedMotion: settings.reducedMotion,
     });
