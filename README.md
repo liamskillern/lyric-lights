@@ -4,6 +4,8 @@
 
 🖥️ **Windows 11 wallpaper:** run it behind your desktop icons with Wallpaper Engine or Lively, see [docs/WINDOWS_WALLPAPER.md](docs/WINDOWS_WALLPAPER.md).
 
+📱 **Android live wallpaper:** the visualizer behind your home screen icons, no Spotify login needed. See [docs/ANDROID_WALLPAPER.md](docs/ANDROID_WALLPAPER.md).
+
 A live visualizer for whatever you're playing on Spotify. Play a song on any device and this page turns it into light:
 
 - **Album art → colors.** The cover is quantized into a palette (median cut, written from scratch) that drives the background, glow and particles.
@@ -63,6 +65,8 @@ There is no backend. The page logs in with **Authorization Code + PKCE**, so it 
 | `src/settings.ts` | Settings with validation (stored values are untrusted) |
 | `src/wallpaper.ts` | `?wallpaper` mode for desktop wallpapers (no UI, frame cap, remembered login) and `?pair` codes for Wallpaper Engine |
 | `wallpaper-engine/` | Wallpaper Engine package that opens the live site in wallpaper mode |
+
+| `src/androidWallpaper.ts` | `?android-wallpaper` mode for the Android live wallpaper: song data from the app, frame cap |
 | `src/render/styles/` | The four visual styles |
 | `src/render/` | Particle effects, lyric typography, idle screen |
 

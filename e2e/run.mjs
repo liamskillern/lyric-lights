@@ -722,6 +722,113 @@ try {
     check((await login.$eval("#settings a[href='privacy.html']", (a) => a.href).catch(() => "")) === `${BASE}privacy.html`, "privacy: linked from settings");
     await ctx2.close();
   }
+
+  // ---- Android live wallpaper mode (?android-wallpaper): song data posted by the app ----
+  {
+    const ctx = await browser.newContext({ ...devices["Pixel 7"] });
+    let spotifyCalls = 0;
+    await ctx.route("https://api.spotify.com/**", (r) => {
+      spotifyCalls++;
+      r.abort();
+    });
+    await ctx.route("https://accounts.spotify.com/**", (r) => {
+      spotifyCalls++;
+      r.abort();
+    });
+    let lrclibQuery = "";
+    await ctx.route("https://lrclib.net/**", (route) => {
+      lrclibQuery = route.request().url();
+      route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        headers: { "access-control-allow-origin": "*" },
+        body: JSON.stringify({
+          trackName: "Phone Song",
+          artistName: "Phone Artist",
+          duration: 200,
+          instrumental: false,
+          plainLyrics: "x",
+          syncedLyrics: "[00:00.50]Golden city lights tonight\n[00:05.00]Rain on the window\n[00:40.00]end",
+        }),
+      });
+    });
+    const page = await ctx.newPage();
+    const errors = watchErrors(page);
+    await page.goto(`${BASE}?android-wallpaper`);
+    await page.waitForTimeout(800);
+    check(await page.evaluate(() => document.body.classList.contains("android-wallpaper")), "android wallpaper: mode is on");
+    check(!(await page.isVisible("#hud")) && !(await page.isVisible("#panel")), "android wallpaper: no buttons, login or setup card");
+    await page.screenshot({ path: `${OUT}android-wallpaper-idle.png` });
+
+    // What WebView.postWebMessage delivers: a message event with no source window.
+    const art = await page.evaluate(() => {
+      const c = document.createElement("canvas");
+      c.width = c.height = 160;
+      const x = c.getContext("2d");
+      const g = x.createLinearGradient(0, 0, 160, 160);
+      g.addColorStop(0, "#ffb300");
+      g.addColorStop(1, "#c2185b");
+      x.fillStyle = g;
+      x.fillRect(0, 0, 160, 160);
+      return c.toDataURL("image/jpeg", 0.85);
+    });
+    const fromApp = (msg) => page.evaluate((m) => window.dispatchEvent(new MessageEvent("message", { data: m, source: null })), JSON.stringify(msg));
+    await fromApp({ type: "settings", settings: { style: "aurora", showLyrics: true }, quality: "balanced" });
+    await fromApp({
+      type: "playback",
+      track: { id: "com.spotify.music|spotify:track:1", name: "Phone Song", artists: ["Phone Artist"], album: "Phone Album", durationMs: 200000 },
+      isPlaying: true,
+      positionMs: 300,
+      art,
+    });
+    await page.waitForFunction(() => document.getElementById("np-title")?.textContent === "Phone Song");
+    check(true, "android wallpaper: shows the song the app posted");
+    // A message from the page itself (it has a source window) is ignored.
+    await page.evaluate(() =>
+      window.postMessage(JSON.stringify({ type: "playback", track: { id: "x", name: "Forged", artists: [], durationMs: 1000 }, isPlaying: true, positionMs: 0 }), "*"),
+    );
+    await page.waitForTimeout(300);
+    check((await page.textContent("#np-title")) === "Phone Song", "android wallpaper: ignores messages that don't come from the app");
+    await page.waitForTimeout(2500);
+    check(lrclibQuery.includes("track_name=Phone+Song") || lrclibQuery.includes("track_name=Phone%20Song"), `android wallpaper: lyrics looked up on LRCLIB (${lrclibQuery.slice(0, 80)})`);
+    const st = await canvasStats(page);
+    check(st.max > 120, `android wallpaper: canvas is drawing (max ${st.max.toFixed(0)})`);
+    await page.screenshot({ path: `${OUT}android-wallpaper-playing.png` });
+
+    // Frame cap: count canvas redraws over 2 s at "balanced" (30 fps) and while hidden.
+    const countFrames = () =>
+      page.evaluate(
+        () =>
+          new Promise((resolve) => {
+            const c = document.getElementById("stage");
+            const ctx2d = c.getContext("2d");
+            const orig = ctx2d.fillRect;
+            let n = 0;
+            let lastFrame = -1;
+            ctx2d.fillRect = function (...a) {
+              const f = Math.floor(performance.now() / 4); // one count per redraw burst
+              if (f !== lastFrame) {
+                lastFrame = f;
+                n++;
+              }
+              return orig.apply(this, a);
+            };
+            setTimeout(() => {
+              ctx2d.fillRect = orig;
+              resolve(n);
+            }, 2000);
+          }),
+      );
+    const playingFrames = await countFrames();
+    check(playingFrames > 20 && playingFrames <= 70, `android wallpaper: about 30 fps while playing (${playingFrames} frames in 2 s)`);
+    await fromApp({ type: "visible", visible: false });
+    const hiddenFrames = await countFrames();
+    check(hiddenFrames === 0, `android wallpaper: draws nothing while hidden (${hiddenFrames} frames)`);
+    await fromApp({ type: "visible", visible: true });
+    check(spotifyCalls === 0, `android wallpaper: never contacts Spotify (${spotifyCalls} calls)`);
+    check(errors.length === 0, `android wallpaper: no console or CSP errors ${errors.join(" | ")}`);
+    await ctx.close();
+  }
 } finally {
   await browser.close();
   server.kill();

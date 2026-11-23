@@ -87,6 +87,16 @@ export class Visualizer {
   karaoke = false;
   /** lyric size multiplier (settings) */
   lyricScale = 1;
+  private _maxDpr = 2;
+  /** sharpness cap: the wallpaper lowers it to save battery */
+  get maxDpr(): number {
+    return this._maxDpr;
+  }
+  set maxDpr(v: number) {
+    if (v === this._maxDpr) return;
+    this._maxDpr = v;
+    this.resize();
+  }
 
   constructor(private canvas: HTMLCanvasElement) {
     this.ctx = canvas.getContext("2d", { alpha: false })!;
@@ -101,7 +111,7 @@ export class Visualizer {
     const w = this.canvas.clientWidth || window.innerWidth;
     const h = this.canvas.clientHeight || window.innerHeight;
     // Sharp on phones, but cap the pixel count so 4K screens stay smooth.
-    let dpr = Math.min(window.devicePixelRatio || 1, 2);
+    let dpr = Math.min(window.devicePixelRatio || 1, this._maxDpr);
     while (dpr > 1 && w * h * dpr * dpr > 4_500_000) dpr -= 0.25;
     this.canvas.width = Math.round(w * dpr);
     this.canvas.height = Math.round(h * dpr);

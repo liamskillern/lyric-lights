@@ -22,6 +22,11 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="io.github.liamskillern.lyriclights">
 
+    <!-- The live wallpaper's WebView loads lyrics from LRCLIB. (The main app runs in Chrome.) -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Not required: phones without live wallpapers can still install the app. -->
+    <uses-feature android:name="android.software.live_wallpaper" android:required="false" />
+
     
 
     
@@ -193,6 +198,48 @@
                 <category android:name="android.intent.category.DEFAULT"/>
             </intent-filter>
         </service>
+
+        <!-- ===== Live wallpaper (wallpaper/, docs/ANDROID_WALLPAPER.md) ===== -->
+
+        <!-- Only the system's wallpaper manager can bind it (BIND_WALLPAPER). -->
+        <service
+            android:name=".wallpaper.LyricLightsWallpaperService"
+            android:label="@string/wallpaperName"
+            android:permission="android.permission.BIND_WALLPAPER"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.service.wallpaper.WallpaperService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.service.wallpaper"
+                android:resource="@xml/lyric_lights_wallpaper" />
+        </service>
+
+        <!-- Lets the wallpaper read the media controls. Only the system can bind it
+             (BIND_NOTIFICATION_LISTENER_SERVICE), and it ignores notifications. -->
+        <service
+            android:name=".wallpaper.MediaListenerService"
+            android:label="@string/wallpaperName"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
+
+        <!-- Setup screen. Exported so the wallpaper picker's settings gear can open it. -->
+        <activity
+            android:name=".wallpaper.WallpaperSettingsActivity"
+            android:label="@string/wallpaperName"
+            android:icon="@mipmap/ic_launcher"
+            android:theme="@android:style/Theme.DeviceDefault.NoActionBar"
+            android:taskAffinity=""
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
 
         
 

@@ -83,3 +83,53 @@ describe("Android app settings", () => {
     });
   });
 });
+
+describe("Android live wallpaper", () => {
+  const manifest = read("android/app/src/main/AndroidManifest.xml");
+  const dir = "android/app/src/main/java/io/github/liamskillern/lyriclights/wallpaper/";
+  const service = read(`${dir}LyricLightsWallpaperService.java`);
+  const prefs = read(`${dir}WallpaperPrefs.java`);
+  const listener = read(`${dir}MediaListenerService.java`);
+
+  /** the <service>/<activity> element whose android:name ends with `name` */
+  const element = (name: string) => {
+    const m = manifest.match(new RegExp(`<(service|activity)[^>]*android:name="\\.wallpaper\\.${name}"[\\s\\S]*?</\\1>`));
+    expect(m, name).not.toBeNull();
+    return m![0];
+  };
+
+  it("only lets the system bind its exported services", () => {
+    expect(element("LyricLightsWallpaperService")).toContain('android:permission="android.permission.BIND_WALLPAPER"');
+    expect(element("MediaListenerService")).toContain('android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE"');
+  });
+
+  it("never reads notification content", () => {
+    const code = listener.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
+    expect(code).not.toMatch(/onNotificationPosted|getActiveNotifications|getNotification/);
+    expect(code).toMatch(/class MediaListenerService extends NotificationListenerService \{\}/);
+  });
+
+  it("loads the bundled site in Android wallpaper mode, never the live site", async () => {
+    const { ANDROID_WALLPAPER_PARAM } = await import("../src/androidWallpaper");
+    expect(service).toContain(`/lyric-lights/index.html?${ANDROID_WALLPAPER_PARAM}"`);
+    expect(service).not.toContain("liamskillern.github.io");
+    expect(service).toContain("setAllowFileAccess(false)");
+    expect(service).toContain("setAllowContentAccess(false)");
+    expect(service).not.toContain("addJavascriptInterface");
+    // The bundle must be built for the same /lyric-lights/ path the loader serves.
+    expect(read("package.json")).toContain("vite build --base=/lyric-lights/");
+    expect(gradle).toContain("'/lyric-lights/assets/'");
+  });
+
+  it("offers the same styles and qualities as the web app", async () => {
+    const { STYLES } = await import("../src/settings");
+    const { QUALITIES } = await import("../src/androidWallpaper");
+    const list = (name: string) => [...prefs.match(new RegExp(`${name} = \\{([^}]*)\\}`))![1].matchAll(/"([a-z]+)"/g)].map((m) => m[1]);
+    expect(list("STYLES")).toEqual([...STYLES]);
+    expect(list("QUALITIES").sort()).toEqual(Object.keys(QUALITIES).sort());
+  });
+
+  it("doesn't make phones without live wallpapers unable to install the app", () => {
+    expect(manifest).toContain('android:name="android.software.live_wallpaper" android:required="false"');
+  });
+});
