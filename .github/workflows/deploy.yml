@@ -37,6 +37,11 @@ jobs:
           # Optional: set a repository variable SPOTIFY_CLIENT_ID (Settings → Secrets and variables
           # → Actions → Variables). It isn't secret. If unset, the app asks for it on first visit.
           VITE_SPOTIFY_CLIENT_ID: ${{ vars.SPOTIFY_CLIENT_ID }}
+      - name: Build the Wallpaper Engine package
+        # Published next to the site as lyric-lights-wallpaper-engine.zip (docs/WINDOWS_WALLPAPER.md).
+        run: |
+          npm run build:wallpaper-engine
+          cp dist-wallpaper-engine/lyric-lights-wallpaper-engine.zip dist/
       - uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3.0.1
         if: github.ref == 'refs/heads/main'
         with:

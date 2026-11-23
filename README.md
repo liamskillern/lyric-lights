@@ -64,7 +64,7 @@ There is no backend. The page logs in with **Authorization Code + PKCE**, so it 
 | `src/render/lyricAnim.ts`, `karaoke.ts` | Lyric animations, word fill, countdowns |
 | `src/settings.ts` | Settings with validation (stored values are untrusted) |
 | `src/wallpaper.ts` | `?wallpaper` mode for desktop wallpapers (no UI, frame cap, remembered login) and `?pair` codes for Wallpaper Engine |
-| `wallpaper-engine/` | Wallpaper Engine package that opens the live site in wallpaper mode |
+| `wallpaper-engine/`, `scripts/make-wallpaper-engine.mjs` | Wallpaper Engine package: the whole app as one local `index.html` (`npm run build:wallpaper-engine`) |
 
 | `src/androidWallpaper.ts` | `?android-wallpaper` mode for the Android live wallpaper: song data from the app, frame cap |
 | `src/render/styles/` | The four visual styles |
